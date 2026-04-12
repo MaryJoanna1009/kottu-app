@@ -1,8 +1,8 @@
 # backend/main.py
 import os
 import sqlite3
-import psycopg2
-from psycopg2.extras import RealDictCursor
+import psycopg
+from psycopg.rows import dict_row
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime, timedelta
@@ -16,26 +16,23 @@ USE_POSTGRES = os.getenv("DATABASE_URL") is not None
 def get_db():
     if USE_POSTGRES:
         db_url = os.getenv("DATABASE_URL")
-        conn = psycopg2.connect(db_url)
+        conn = psycopg.connect(db_url, row_factory=dict_row)
         conn.autocommit = False
-        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur = conn.cursor()
         return cur, conn
     else:
         conn = sqlite3.connect("kottu.db")
         conn.row_factory = sqlite3.Row
-        return conn, None  # SQLite doesn't need cursor/conn split
+        return conn, None
 
 def init_db():
     if USE_POSTGRES:
         cur, conn = get_db()
-        # PostgreSQL table creation
         cur.execute('''CREATE TABLE IF NOT EXISTS inventory (id SERIAL PRIMARY KEY, name TEXT NOT NULL, price INTEGER NOT NULL, stock INTEGER NOT NULL DEFAULT 0)''')
         cur.execute('''CREATE TABLE IF NOT EXISTS orders (id SERIAL PRIMARY KEY, item_id INTEGER NOT NULL, customer_name TEXT NOT NULL, quantity INTEGER NOT NULL, status TEXT DEFAULT 'pending', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
         cur.execute('''CREATE TABLE IF NOT EXISTS customers (id SERIAL PRIMARY KEY, name TEXT UNIQUE NOT NULL, phone TEXT, credit_limit INTEGER DEFAULT 500)''')
         cur.execute('''CREATE TABLE IF NOT EXISTS udhaar (id SERIAL PRIMARY KEY, customer_id INTEGER NOT NULL, amount REAL NOT NULL, type TEXT CHECK(type IN ('credit','payment')) NOT NULL, note TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
         cur.execute('''CREATE TABLE IF NOT EXISTS sales_history (id SERIAL PRIMARY KEY, item_id INTEGER NOT NULL, quantity INTEGER NOT NULL, sale_date DATE DEFAULT CURRENT_DATE)''')
-        
-        # Seed data
         cur.execute("SELECT COUNT(*) FROM inventory")
         if cur.fetchone()['count'] == 0:
             items = [(1, "Milk (1L)", 60, 50), (2, "Bread", 40, 30), (3, "Eggs (6)", 45, 20), (4, "Atta (5kg)", 220, 15), (5, "Sugar (1kg)", 55, 10), (6, "Tea Powder", 85, 10)]
@@ -48,7 +45,6 @@ def init_db():
         cur.close()
         conn.close()
     else:
-        # SQLite table creation (your existing working code)
         conn = get_db()[0]
         conn.execute('''CREATE TABLE IF NOT EXISTS inventory (id INTEGER PRIMARY KEY, name TEXT, price INTEGER, stock INTEGER)''')
         conn.execute('''CREATE TABLE IF NOT EXISTS orders (id INTEGER PRIMARY KEY AUTOINCREMENT, item_id INTEGER, customer_name TEXT, quantity INTEGER, status TEXT DEFAULT 'pending', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
@@ -80,7 +76,7 @@ class ConnectionManager:
             except: self.disconnect(conn)
 manager = ConnectionManager()
 
-# ==================== APIs (Auto-detect DB) ====================
+# ==================== APIs ====================
 @app.get("/api/inventory")
 def get_inventory():
     if USE_POSTGRES:
@@ -176,12 +172,12 @@ async def add_udhaar(customer_name: str = Query(...), amount: float = Query(...)
     try:
         if USE_POSTGRES:
             cur, conn = get_db()
-            cur.execute("SELECT id FROM customers WHERE LOWER(name) = LOWER(%s)", (customer_name.strip(),))
+            cur.execute("SELECT id FROM customers WHERE name = %s", (customer_name.strip(),))
             cust = cur.fetchone()
             if not cust:
                 cur.execute("INSERT INTO customers (name, phone, credit_limit) VALUES (%s, %s, %s)", (customer_name.strip(), "", 500))
                 conn.commit()
-                cur.execute("SELECT id FROM customers WHERE LOWER(name) = LOWER(%s)", (customer_name.strip(),))
+                cur.execute("SELECT id FROM customers WHERE name = %s", (customer_name.strip(),))
                 cust = cur.fetchone()
             if not cust: return {"error": "Could not create customer"}
             if type not in ('credit', 'payment'): return {"error": "Type must be 'credit' or 'payment'"}
