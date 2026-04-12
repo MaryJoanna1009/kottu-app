@@ -13,6 +13,7 @@ from pydantic import BaseModel
 app = FastAPI(title="KOTTU Multi-Shop Backend")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
+# Pydantic Models
 class RegisterData(BaseModel):
     name: str = ""
     phone: str
@@ -37,11 +38,10 @@ def get_db():
         # Local SQLite mode
         conn = sqlite3.connect("kottu.db")
         conn.row_factory = sqlite3.Row
-        return conn, None  # SQLite doesn't need separate cursor
+        return conn, None
 
 def init_db():
     if USE_POSTGRES:
-        # PostgreSQL initialization
         cur, conn = get_db()
         cur.execute("CREATE TABLE IF NOT EXISTS users (id SERIAL PRIMARY KEY, name TEXT, phone TEXT UNIQUE, password TEXT, role TEXT DEFAULT 'customer', shop_name TEXT, token TEXT)")
         cur.execute("CREATE TABLE IF NOT EXISTS inventory (id SERIAL PRIMARY KEY, shop_id INTEGER, name TEXT, price INTEGER, stock INTEGER DEFAULT 0)")
@@ -49,10 +49,8 @@ def init_db():
         cur.execute("CREATE TABLE IF NOT EXISTS udhaar (id SERIAL PRIMARY KEY, shop_id INTEGER, customer_name TEXT, amount REAL, type TEXT CHECK(type IN ('credit','payment')), note TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
         cur.execute("CREATE TABLE IF NOT EXISTS sales_history (id SERIAL PRIMARY KEY, shop_id INTEGER, item_id INTEGER, quantity INTEGER, sale_date DATE DEFAULT CURRENT_DATE)")
         conn.commit()
-        cur.close()
-        conn.close()
+        cur.close(); conn.close()
     else:
-        # SQLite initialization (for local development)
         conn, _ = get_db()
         conn.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, phone TEXT UNIQUE, password TEXT, role TEXT DEFAULT 'customer', shop_name TEXT, token TEXT)")
         conn.execute("CREATE TABLE IF NOT EXISTS inventory (id INTEGER PRIMARY KEY AUTOINCREMENT, shop_id INTEGER, name TEXT, price INTEGER, stock INTEGER DEFAULT 0)")
@@ -229,6 +227,7 @@ async def add_udhaar(shop_id: int, customer_name: str, amount: float, type: str,
 def get_udhaar_ledger(shop_id: int):
     if USE_POSTGRES:
         cur, conn = get_db()
+        # Group by customer name for this shop
         res = [dict(r) for r in cur.execute("SELECT customer_name, SUM(CASE WHEN type='credit' THEN amount ELSE -amount END) as balance FROM udhaar WHERE shop_id=%s GROUP BY customer_name ORDER BY customer_name", (shop_id,)).fetchall()]
         cur.close(); conn.close()
         return res
@@ -275,4 +274,4 @@ async def ws_ep(ws: WebSocket):
     except WebSocketDisconnect: manager.disconnect(ws)
 
 @app.get("/")
-def root(): return {"status": "✅ KOTTU Backend is running", "mode": "PostgreSQL" if USE_POSTGRES else "SQLite"}
+def root(): return {"status": "✅ KOTTU Multi-Shop Live"}
