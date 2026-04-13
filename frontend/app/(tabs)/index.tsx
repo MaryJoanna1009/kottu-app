@@ -1,17 +1,30 @@
-// frontend/App.js
+// frontend/app/(tabs)/index.tsx
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, FlatList, TouchableOpacity, ActivityIndicator, Alert, SafeAreaView, StatusBar, TextInput, Modal, Switch, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
+import { 
+  StyleSheet, Text, View, FlatList, TouchableOpacity, 
+  ActivityIndicator, Alert, SafeAreaView, StatusBar, TextInput, Modal, KeyboardAvoidingView, Platform 
+} from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+// ✅ CRITICAL: Use cloud URL for phone testing
 const API_URL = 'https://kottu-backend.onrender.com';
+// For local testing only, change to: 'http://192.168.31.63:8000' (your laptop IP)
+
+type User = { id: number; name: string; phone: string; role: 'customer' | 'shopkeeper'; shop_name: string; token?: string } | null;
+type Shop = { id: number; name: string; shop_name: string };
+type Product = { id: number; name: string; price: number; stock: number };
+type Order = { id: number; item_id: number; customer_name: string; quantity: number; status: string; created_at: string };
+type UdhaarEntry = { customer_name: string; balance: number };
+type AlertItem = { type: string; item: string; message: string; priority: string };
+type UdhaarModalState = { customer_name: string; amount: number; type: 'credit' | 'payment'; note: string } | null;
 
 export default function App() {
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState<User>(null);
   const [loading, setLoading] = useState(true);
   const [isLogin, setIsLogin] = useState(true);
-  const [formData, setFormData] = useState({ name: '', phone: '', password: '', role: 'customer', shop_name: '' });
+  const [formData, setFormData] = useState({ name: '', phone: '', password: '', role: 'customer' as 'customer' | 'shopkeeper', shop_name: '' });
   const [authLoading, setAuthLoading] = useState(false);
-  const [selectedShop, setSelectedShop] = useState(null);
+  const [selectedShop, setSelectedShop] = useState<Shop | null>(null);
 
   useEffect(() => { loadSession(); }, []);
 
@@ -20,11 +33,10 @@ export default function App() {
       const savedUser = await AsyncStorage.getItem('kottu_user');
       const savedShop = await AsyncStorage.getItem('kottu_selected_shop');
       if (savedUser) {
-        const u = JSON.parse(savedUser);
-        setUser(u);
-        if (savedShop) setSelectedShop(JSON.parse(savedShop));
+        setUser(JSON.parse(savedUser) as User);
+        if (savedShop) setSelectedShop(JSON.parse(savedShop) as Shop);
       }
-    } catch(e) {}
+    } catch(e: any) { console.log('Load session error:', e.message); }
     finally { setLoading(false); }
   };
 
@@ -36,20 +48,34 @@ export default function App() {
     setAuthLoading(true);
     try {
       const endpoint = isLogin ? 'login' : 'register';
-      const body = { phone, password };
-      if(!isLogin) { body.name = name; body.role = role; body.shop_name = role==='shopkeeper' ? shop_name : ''; }
+      const body: any = { phone, password };
+      if(!isLogin) { body.name = name; body.role = role; body.shop_name = role === 'shopkeeper' ? shop_name : ''; }
 
+      console.log(`🔐 Calling ${API_URL}/api/auth/${endpoint} with`, body);
       const res = await fetch(`${API_URL}/api/auth/${endpoint}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
       });
       const data = await res.json();
+      console.log('🔐 Auth response:', data);
+      
       if(data.error) throw new Error(data.error);
       
-      const userData = { id: data.user_id || data.id, name: data.name, phone, role: data.role || role, shop_name: data.shop_name || shop_name };
+      const userData: User = { 
+        id: data.user_id || data.id, 
+        name: data.name, 
+        phone, 
+        role: data.role || role, 
+        shop_name: data.shop_name || shop_name,
+        token: data.token 
+      };
       await AsyncStorage.setItem('kottu_user', JSON.stringify(userData));
       setUser(userData);
       if(data.role === 'customer') setSelectedShop(null);
-    } catch(e) { Alert.alert('Failed', e.message); }
+      Alert.alert('Success', `Welcome, ${userData.name}!`);
+    } catch(e: any) { 
+      console.log('❌ Auth error:', e.message);
+      Alert.alert('Failed', e.message || 'Unknown error'); 
+    }
     finally { setAuthLoading(false); }
   };
 
@@ -60,14 +86,17 @@ export default function App() {
     setFormData({ name: '', phone: '', password: '', role: 'customer', shop_name: '' });
   };
 
-  if(loading) return <View style={styles.center}><ActivityIndicator size="large" color="#2E7D32" /></View>;
+  if(loading) return <View style={styles.center}><ActivityIndicator size="large" color="#2E7D32" /><Text style={{marginTop:10}}>Loading...</Text></View>;
   if(!user) return <AuthScreen isLogin={isLogin} setIsLogin={setIsLogin} formData={formData} setFormData={setFormData} handleAuth={handleAuth} authLoading={authLoading} />;
 
   return <MainApp user={user} selectedShop={selectedShop} setSelectedShop={setSelectedShop} onLogout={logout} />;
 }
 
-// ==================== AUTH SCREEN ====================
-function AuthScreen({ isLogin, setIsLogin, formData, setFormData, handleAuth, authLoading }) {
+function AuthScreen({ isLogin, setIsLogin, formData, setFormData, handleAuth, authLoading }: {
+  isLogin: boolean; setIsLogin: (v: boolean) => void;
+  formData: { name: string; phone: string; password: string; role: 'customer' | 'shopkeeper'; shop_name: string };
+  setFormData: (v: any) => void; handleAuth: () => Promise<void>; authLoading: boolean;
+}) {
   return (
     <SafeAreaView style={styles.authContainer}>
       <StatusBar barStyle="dark-content" />
@@ -98,50 +127,47 @@ function AuthScreen({ isLogin, setIsLogin, formData, setFormData, handleAuth, au
   );
 }
 
-// ==================== MAIN APP ====================
-function MainApp({ user, selectedShop, setSelectedShop, onLogout }) {
-  const [role] = useState(user.role);
-  const [shops, setShops] = useState([]);
-  const [products, setProducts] = useState([]);
-  const [orders, setOrders] = useState([]);
-  const [udhaar, setUdhaar] = useState([]);
-  const [alerts, setAlerts] = useState([]);
+function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
+  user: User; selectedShop: Shop | null; setSelectedShop: (v: Shop | null) => void; onLogout: () => Promise<void>;
+}) {
+  const [role] = useState<'customer' | 'shopkeeper'>(user?.role || 'customer');
+  const [shops, setShops] = useState<Shop[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [udhaar, setUdhaar] = useState<UdhaarEntry[]>([]);
+  const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [debugMsg, setDebugMsg] = useState('Initializing...');
   const [activeTab, setActiveTab] = useState(role==='shopkeeper' ? 'inventory' : 'shops');
   const [addItemModal, setAddItemModal] = useState(false);
   const [newItem, setNewItem] = useState({name:'', price:'', stock:''});
-  const [orderModal, setOrderModal] = useState(null);
+  const [orderModal, setOrderModal] = useState<Product | null>(null);
   const [custName, setCustName] = useState('');
   const [qty, setQty] = useState('1');
-  const [udhaarModal, setUdhaarModal] = useState(null);
+  const [udhaarModal, setUdhaarModal] = useState<UdhaarModalState>(null);
 
-  const shopId = role === 'shopkeeper' ? user.id : (selectedShop?.id || null);
+  // ✅ CRITICAL: For shopkeepers, shop_id = user.id. For customers, shop_id = selectedShop.id
+  const shopId = role === 'shopkeeper' ? user?.id : (selectedShop?.id || null);
 
   const fetchData = async () => {
-    setLoading(true);
-    setDebugMsg(`shopId = ${shopId || 'NULL'}`);
-
     if (!shopId) {
       setLoading(false);
       setDebugMsg('✅ Customer mode: showing shop list');
       return;
     }
 
-    setDebugMsg('🌐 Connecting to cloud...');
-    const url = `${API_URL}/api/inventory?shop_id=${shopId}`;
+    setLoading(true);
+    setDebugMsg(`🌐 Fetching data for shop_id=${shopId}...`);
+    console.log(`🌐 Fetching from ${API_URL}/api/inventory?shop_id=${shopId}`);
     
     try {
-      // 🔥 Bulletproof 12s timeout
-      const fetchPromise = fetch(url);
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Server timeout (Render is waking up)')), 12000)
-      );
-
-      const res = await Promise.race([fetchPromise, timeoutPromise]);
+      const fetchPromise = fetch(`${API_URL}/api/inventory?shop_id=${shopId}`);
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Server timeout (12s)')), 12000));
+      const res = await Promise.race([fetchPromise, timeoutPromise]) as Response;
       
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
+      const data = await res.json() as Product[];
+      console.log(`✅ Loaded ${data.length} items`);
       setProducts(data);
       setDebugMsg(`✅ Loaded ${data.length} items`);
 
@@ -150,9 +176,14 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }) {
         fetch(`${API_URL}/api/orders?shop_id=${shopId}`).then(r=>r.json()),
         fetch(`${API_URL}/api/customers?shop_id=${shopId}`).then(r=>r.json()),
         fetch(`${API_URL}/api/alerts?shop_id=${shopId}`).then(r=>r.json())
-      ]).then(([o,u,a]) => { setOrders(o); setUdhaar(u); setAlerts(a); });
-
-    } catch (err) {
+      ]).then(([o,u,a]) => { 
+        setOrders(o as Order[]); 
+        setUdhaar(u as UdhaarEntry[]); 
+        setAlerts(a as AlertItem[]); 
+        console.log('✅ Fetched orders, udhaar, alerts');
+      });
+    } catch (err: any) {
+      console.log('❌ Fetch error:', err.message);
       setDebugMsg(`❌ ${err.message}. Tap Refresh.`);
     } finally {
       setLoading(false);
@@ -162,74 +193,108 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }) {
   useEffect(() => {
     if(role==='customer' && !selectedShop) {
       setLoading(true);
+      setDebugMsg('🌐 Fetching shops list...');
       fetch(`${API_URL}/api/shops`)
         .then(r=>r.json())
-        .then(setShops)
-        .catch(()=>{})
+        .then(data => {
+          console.log('✅ Shops:', data);
+          setShops(data as Shop[]);
+        })
+        .catch(e => console.log('❌ Fetch shops error:', e.message))
         .finally(()=>setLoading(false));
-    } else if(shopId) {
-      fetchData();
+    } else if(shopId) { 
+      fetchData(); 
     }
-  }, [shopId]);
+  }, [shopId, role, selectedShop]);
 
   const addItem = async () => {
     if(!newItem.name || !newItem.price || !newItem.stock) return Alert.alert('Error', 'Fill all fields');
+    if(!shopId) return Alert.alert('Error', 'Shop ID missing');
+    
     try {
-      await fetch(`${API_URL}/api/inventory/add?shop_id=${shopId}&name=${encodeURIComponent(newItem.name)}&price=${newItem.price}&stock=${newItem.stock}`, {method:'POST'});
+      console.log(`➕ Adding item: shop_id=${shopId}, name=${newItem.name}`);
+      const res = await fetch(`${API_URL}/api/inventory/add?shop_id=${shopId}&name=${encodeURIComponent(newItem.name)}&price=${newItem.price}&stock=${newItem.stock}`, {method:'POST'});
+      const data = await res.json();
+      console.log('➕ Add item response:', data);
+      
+      if(data.error) throw new Error(data.error);
+      Alert.alert('✅ Added', `${newItem.name} added to your shop!`);
       setAddItemModal(false); setNewItem({name:'',price:'',stock:''}); fetchData();
-    } catch(e) { Alert.alert('Error', 'Failed'); }
+    } catch(e: any) { 
+      console.log('❌ Add item error:', e.message);
+      Alert.alert('Error', e.message || 'Failed to add item'); 
+    }
   };
 
   const placeOrder = async () => {
-    if(!custName.trim()) return Alert.alert('Error', 'Enter name');
+    if(!custName.trim() || !orderModal) return Alert.alert('Error', 'Enter name');
+    if(!shopId) return Alert.alert('Error', 'Shop ID missing');
+    
     try {
+      console.log(`🛒 Placing order: shop_id=${shopId}, item_id=${orderModal.id}`);
       const res = await fetch(`${API_URL}/api/orders?shop_id=${shopId}&item_id=${orderModal.id}&customer_name=${encodeURIComponent(custName)}&quantity=${qty}`, {method:'POST'});
       const data = await res.json();
+      console.log('🛒 Order response:', data);
+      
       if(data.error) return Alert.alert('Failed', data.error);
       Alert.alert('Success', `Ordered ${qty}x ${orderModal.name}`);
       setOrderModal(null); setCustName(''); setQty('1'); fetchData();
-    } catch(e) { Alert.alert('Error', 'Connection failed'); }
+    } catch(e: any) { 
+      console.log('❌ Order error:', e.message);
+      Alert.alert('Error', e.message || 'Connection failed'); 
+    }
   };
 
   const recordUdhaar = async () => {
-    const name = udhaarModal?.customer_name?.trim();
-    const amount = udhaarModal?.amount;
+    if(!udhaarModal) return;
+    const name = udhaarModal.customer_name.trim();
+    const amount = udhaarModal.amount;
     if(!name || !amount) return Alert.alert('Error', 'Name & Amount required');
+    if(!shopId) return Alert.alert('Error', 'Shop ID missing');
+    
     try {
-      await fetch(`${API_URL}/api/udhaar?shop_id=${shopId}&customer_name=${encodeURIComponent(name)}&amount=${amount}&type=${udhaarModal.type}&note=${encodeURIComponent(udhaarModal.note||'')}`, {method:'POST'});
+      console.log(`📒 Recording udhaar: shop_id=${shopId}, customer=${name}`);
+      const res = await fetch(`${API_URL}/api/udhaar?shop_id=${shopId}&customer_name=${encodeURIComponent(name)}&amount=${amount}&type=${udhaarModal.type}&note=${encodeURIComponent(udhaarModal.note||'')}`, {method:'POST'});
+      const data = await res.json();
+      console.log('📒 Udhaar response:', data);
+      
+      if(data.error) throw new Error(data.error);
       Alert.alert('✅ Recorded', `${udhaarModal.type} saved`);
       setUdhaarModal(null); fetchData();
-    } catch(e) { Alert.alert('Failed', e.message); }
+    } catch(e: any) { 
+      console.log('❌ Udhaar error:', e.message);
+      Alert.alert('Failed', e.message || 'Error'); 
+    }
   };
 
-  // Render helpers
-  const renderShopItem = ({item}) => (
+  // ==================== RENDER HELPERS ====================
+  const renderShopItem = ({item}: {item: Shop}) => (
     <TouchableOpacity style={styles.shopCard} onPress={()=>{setSelectedShop(item); setActiveTab('inventory');}}>
       <Text style={styles.shopName}>{item.shop_name || item.name}</Text>
       <Text style={styles.shopSub}>Tap to view items</Text>
     </TouchableOpacity>
   );
 
-  const renderProductItem = ({item}) => (
+  const renderProductItem = ({item}: {item: Product}) => (
     <TouchableOpacity style={[styles.card, item.stock===0 && styles.disabled]} onPress={()=> role==='customer' && item.stock>0 ? setOrderModal(item) : setOrderModal(item)}>
       <View style={styles.prodInfo}><Text style={styles.prodName}>{item.name}</Text><Text style={styles.prodPrice}>₹{item.price}</Text></View>
       <Text style={[styles.badge, item.stock>5?styles.in:item.stock>0?styles.low:styles.out]}>{item.stock>0 ? `${item.stock} Left` : '❌ Out'}</Text>
     </TouchableOpacity>
   );
 
-  const renderOrderItem = ({item}) => (
+  const renderOrderItem = ({item}: {item: Order}) => (
     <View style={styles.orderCard}><Text style={styles.orderText}>{item.customer_name} ordered {item.quantity}x {products.find(p=>p.id===item.item_id)?.name || 'Item'}</Text></View>
   );
 
-  const renderUdhaarItem = ({item, index}) => (
+  const renderUdhaarItem = ({item}: {item: UdhaarEntry}) => (
     <View style={styles.ledgerCard}><Text style={styles.custName}>{item.customer_name}</Text><Text style={[styles.balance, item.balance>0?styles.overdue:styles.ok]}>₹{item.balance}</Text></View>
   );
 
-  const renderAlertItem = ({item}) => (
+  const renderAlertItem = ({item}: {item: AlertItem}) => (
     <View style={[styles.alertCard, item.priority==='high' && styles.alertHigh]}><Text style={styles.alertIcon}>📈</Text><Text style={styles.alertMessage}>{item.message}</Text></View>
   );
 
-  // Customer shop list
+  // ==================== CUSTOMER SHOP LIST ====================
   if(role==='customer' && !selectedShop) {
     return (
       <SafeAreaView style={styles.container}>
@@ -246,21 +311,21 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }) {
     );
   }
 
-  // DEBUG / LOADING SCREEN
+  // ==================== LOADING / ERROR STATE ====================
   if(loading) return (
     <View style={styles.center}>
       <ActivityIndicator size="large" color="#2E7D32" />
       <Text style={{marginTop:12, color:'#333', fontWeight:'500'}}>{debugMsg}</Text>
-      <TouchableOpacity style={{marginTop:15, padding:10, backgroundColor:'#eee', borderRadius:8}} onPress={()=>setLoading(false)}>
+      <TouchableOpacity style={{marginTop:15, padding:10, backgroundColor:'#eee', borderRadius:8}} onPress={()=>{setLoading(false); setDebugMsg('Stopped loading');}}>
         <Text style={{color:'#333'}}>⏹️ Stop Loading & See UI</Text>
       </TouchableOpacity>
     </View>
   );
 
+  // ==================== MAIN DASHBOARD ====================
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
-      {/* Debug bar at top */}
       <View style={{backgroundColor:'#f0f4f8', padding:8, alignItems:'center'}}>
         <Text style={{fontSize:11, color:'#666'}}>{debugMsg}</Text>
         <TouchableOpacity onPress={fetchData} style={{marginTop:4, padding:6, backgroundColor:'#e0e7ff', borderRadius:6}}>
@@ -271,7 +336,7 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }) {
       <View style={styles.header}>
         <View style={styles.headerTop}>
           <Text style={styles.title}>🛒 KOTTU</Text>
-          {role==='shopkeeper' ? <Text style={{color:'#fff', fontSize:14}}>{user.shop_name}</Text> : 
+          {role==='shopkeeper' ? <Text style={{color:'#fff', fontSize:14}}>{user?.shop_name}</Text> : 
            <TouchableOpacity onPress={()=>setSelectedShop(null)}><Text style={{color:'#fff', fontSize:12}}>← Back to Shops</Text></TouchableOpacity>}
         </View>
         <TouchableOpacity onPress={onLogout}><Text style={{color:'#fff', fontSize:12, marginTop:4}}>🚪 Logout</Text></TouchableOpacity>
@@ -302,7 +367,7 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }) {
         {activeTab==='alerts' && (alerts.length===0 ? <View style={styles.emptyAlerts}><Text style={styles.emptyIcon}>✅</Text><Text style={styles.emptyText}>All good!</Text></View> : <FlatList data={alerts} keyExtractor={(i,idx)=>idx.toString()} contentContainerStyle={styles.list} renderItem={renderAlertItem} />)}
       </View>
 
-      {/* Modals */}
+      {/* ==================== MODALS ==================== */}
       <Modal visible={addItemModal} transparent animationType="slide">
         <View style={styles.modalOverlay}><View style={styles.modalContent}><Text style={styles.modalTitle}>➕ Add Item</Text>
           <TextInput style={styles.input} placeholder="Item Name" value={newItem.name} onChangeText={v=>setNewItem({...newItem, name:v})}/>
@@ -323,13 +388,13 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }) {
 
       <Modal visible={!!udhaarModal} transparent animationType="slide">
         <View style={styles.modalOverlay}><View style={styles.modalContent}><Text style={styles.modalTitle}>📒 Record Udhaar</Text>
-          <TextInput style={styles.input} placeholder="Customer" value={udhaarModal?.customer_name||''} onChangeText={v=>setUdhaarModal(p=>({...p, customer_name:v}))}/>
-          <TextInput style={styles.input} keyboardType="numeric" placeholder="Amount" value={udhaarModal?.amount?.toString()||''} onChangeText={v=>setUdhaarModal(p=>({...p, amount:parseInt(v)||0}))}/>
+          <TextInput style={styles.input} placeholder="Customer Name" value={udhaarModal?.customer_name || ''} onChangeText={v => setUdhaarModal(p => p ? { ...p, customer_name: v } : { customer_name: v, amount: 0, type: 'credit', note: '' })} />
+          <TextInput style={styles.input} keyboardType="numeric" placeholder="Amount" value={udhaarModal?.amount?.toString() || ''} onChangeText={v => setUdhaarModal(p => p ? { ...p, amount: parseInt(v) || 0 } : { customer_name: '', amount: parseInt(v) || 0, type: 'credit', note: '' })} />
           <View style={styles.typeToggle}>
-            <TouchableOpacity style={[styles.typeBtn, udhaarModal?.type==='credit'&&styles.active]} onPress={()=>setUdhaarModal(p=>({...p, type:'credit'}))}><Text style={styles.typeTxt}>➕ Credit</Text></TouchableOpacity>
-            <TouchableOpacity style={[styles.typeBtn, udhaarModal?.type==='payment'&&styles.active]} onPress={()=>setUdhaarModal(p=>({...p, type:'payment'}))}><Text style={styles.typeTxt}>➖ Payment</Text></TouchableOpacity>
+            <TouchableOpacity style={[styles.typeBtn, udhaarModal?.type === 'credit' && styles.active]} onPress={() => setUdhaarModal(p => p ? { ...p, type: 'credit' } : { customer_name: '', amount: 0, type: 'credit', note: '' })}><Text style={styles.typeTxt}>➕ Credit</Text></TouchableOpacity>
+            <TouchableOpacity style={[styles.typeBtn, udhaarModal?.type === 'payment' && styles.active]} onPress={() => setUdhaarModal(p => p ? { ...p, type: 'payment' } : { customer_name: '', amount: 0, type: 'payment', note: '' })}><Text style={styles.typeTxt}>➖ Payment</Text></TouchableOpacity>
           </View>
-          <View style={styles.modalBtns}><TouchableOpacity style={styles.cancel} onPress={()=>setUdhaarModal(null)}><Text style={styles.btnTxt}>Cancel</Text></TouchableOpacity><TouchableOpacity style={styles.confirm} onPress={recordUdhaar}><Text style={[styles.btnTxt,{color:'#fff'}]}>Save</Text></TouchableOpacity></View>
+          <View style={styles.modalBtns}><TouchableOpacity style={styles.cancel} onPress={()=>{setUdhaarModal(null); setDebugMsg('Initializing...');}}><Text style={styles.btnTxt}>Cancel</Text></TouchableOpacity><TouchableOpacity style={styles.confirm} onPress={recordUdhaar}><Text style={[styles.btnTxt,{color:'#fff'}]}>Save</Text></TouchableOpacity></View>
         </View></View>
       </Modal>
     </SafeAreaView>
@@ -338,67 +403,28 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }) {
 
 // ==================== STYLES ====================
 const styles = StyleSheet.create({
-  container:{flex:1, backgroundColor:'#f8f9fa'}, 
-  header:{padding:16, backgroundColor:'#2E7D32', borderBottomLeftRadius:16, borderBottomRightRadius:16},
-  headerTop:{flexDirection:'row', justifyContent:'space-between', alignItems:'center'}, 
-  title:{fontSize:24, fontWeight:'bold', color:'#fff'},
+  container:{flex:1, backgroundColor:'#f8f9fa'}, header:{padding:16, backgroundColor:'#2E7D32', borderBottomLeftRadius:16, borderBottomRightRadius:16},
+  headerTop:{flexDirection:'row', justifyContent:'space-between', alignItems:'center'}, title:{fontSize:24, fontWeight:'bold', color:'#fff'},
   tabs:{flexDirection:'row', backgroundColor:'#fff', padding:8, borderBottomWidth:1, borderBottomColor:'#eee'},
-  tab:{flex:1, padding:10, alignItems:'center', borderRadius:8, marginHorizontal:2},
-  activeTab:{backgroundColor:'#2E7D32'}, 
-  tabText:{fontSize:12, color:'#666'}, 
-  activeTabText:{color:'#fff', fontWeight:'600'},
+  tab:{flex:1, padding:10, alignItems:'center', borderRadius:8, marginHorizontal:2}, activeTab:{backgroundColor:'#2E7D32'}, tabText:{fontSize:12, color:'#666'}, activeTabText:{color:'#fff', fontWeight:'600'},
   list:{padding:12, paddingBottom:80},
-  shopCard:{backgroundColor:'white', padding:16, borderRadius:12, marginBottom:10, elevation:2},
-  shopName:{fontSize:18, fontWeight:'bold', color:'#333'}, 
-  shopSub:{fontSize:13, color:'#888', marginTop:4},
+  shopCard:{backgroundColor:'white', padding:16, borderRadius:12, marginBottom:10, elevation:2}, shopName:{fontSize:18, fontWeight:'bold', color:'#333'}, shopSub:{fontSize:13, color:'#888', marginTop:4},
   addBtn:{margin:12, padding:12, backgroundColor:'#4A90E2', borderRadius:10, alignItems:'center'},
-  card:{backgroundColor:'white', padding:14, borderRadius:12, marginBottom:10, flexDirection:'row', justifyContent:'space-between', alignItems:'center', elevation:2},
-  disabled:{opacity:0.5}, 
-  prodInfo:{flex:1}, 
-  prodName:{fontSize:16, fontWeight:'600', color:'#333'}, 
-  prodPrice:{fontSize:15, color:'#2E7D32', fontWeight:'bold', marginTop:2},
-  badge:{paddingHorizontal:10, paddingVertical:4, borderRadius:12, fontSize:12, fontWeight:'600'}, 
-  in:{backgroundColor:'#E8F5E9', color:'#2E7D32'}, 
-  low:{backgroundColor:'#FFF3E0', color:'#E65100'}, 
-  out:{backgroundColor:'#FFEBEE', color:'#C62828'},
-  orderCard:{backgroundColor:'#f0f4f8', padding:12, borderRadius:10, marginBottom:8, flexDirection:'row', justifyContent:'space-between'},
-  orderText:{fontSize:14, color:'#333', flex:1},
-  ledgerCard:{backgroundColor:'white', padding:14, borderRadius:12, marginBottom:10, flexDirection:'row', justifyContent:'space-between', alignItems:'center', elevation:1},
-  custName:{fontSize:16, fontWeight:'600', color:'#333'}, 
-  balance:{fontSize:15, fontWeight:'bold'}, 
-  ok:{color:'#2E7D32'}, 
-  overdue:{color:'#C62828'},
-  emptyAlerts:{padding:30, alignItems:'center', backgroundColor:'#f8f9fa', borderRadius:12, margin:12},
-  emptyIcon:{fontSize:40, marginBottom:10}, 
-  emptyText:{fontSize:16, fontWeight:'600', color:'#333', marginBottom:4},
-  alertCard:{backgroundColor:'white', padding:14, borderRadius:12, marginBottom:10, flexDirection:'row', alignItems:'center', elevation:2, borderLeftWidth:4, borderLeftColor:'#2E7D32'},
-  alertHigh:{borderLeftColor:'#C62828', backgroundColor:'#FFEBEE'}, 
-  alertIcon:{fontSize:20, marginRight:10}, 
-  alertMessage:{fontSize:14, color:'#333', fontWeight:'500'},
-  modalOverlay:{flex:1, backgroundColor:'rgba(0,0,0,0.5)', justifyContent:'center', alignItems:'center'}, 
-  modalContent:{width:'90%', backgroundColor:'white', borderRadius:14, padding:18, maxHeight:'80%'},
-  modalTitle:{fontSize:17, fontWeight:'bold', marginBottom:12, color:'#333'}, 
+  card:{backgroundColor:'white', padding:14, borderRadius:12, marginBottom:10, flexDirection:'row', justifyContent:'space-between', alignItems:'center', elevation:2}, disabled:{opacity:0.5}, prodInfo:{flex:1}, prodName:{fontSize:16, fontWeight:'600', color:'#333'}, prodPrice:{fontSize:15, color:'#2E7D32', fontWeight:'bold', marginTop:2},
+  badge:{paddingHorizontal:10, paddingVertical:4, borderRadius:12, fontSize:12, fontWeight:'600'}, in:{backgroundColor:'#E8F5E9', color:'#2E7D32'}, low:{backgroundColor:'#FFF3E0', color:'#E65100'}, out:{backgroundColor:'#FFEBEE', color:'#C62828'},
+  orderCard:{backgroundColor:'#f0f4f8', padding:12, borderRadius:10, marginBottom:8, flexDirection:'row', justifyContent:'space-between'}, orderText:{fontSize:14, color:'#333', flex:1},
+  ledgerCard:{backgroundColor:'white', padding:14, borderRadius:12, marginBottom:10, flexDirection:'row', justifyContent:'space-between', alignItems:'center', elevation:1}, custName:{fontSize:16, fontWeight:'600', color:'#333'}, balance:{fontSize:15, fontWeight:'bold'}, ok:{color:'#2E7D32'}, overdue:{color:'#C62828'},
+  emptyAlerts:{padding:30, alignItems:'center', backgroundColor:'#f8f9fa', borderRadius:12, margin:12}, emptyIcon:{fontSize:40, marginBottom:10}, emptyText:{fontSize:16, fontWeight:'600', color:'#333', marginBottom:4},
+  alertCard:{backgroundColor:'white', padding:14, borderRadius:12, marginBottom:10, flexDirection:'row', alignItems:'center', elevation:2, borderLeftWidth:4, borderLeftColor:'#2E7D32'}, alertHigh:{borderLeftColor:'#C62828', backgroundColor:'#FFEBEE'}, alertIcon:{fontSize:20, marginRight:10}, alertMessage:{fontSize:14, color:'#333', fontWeight:'500'},
+  modalOverlay:{flex:1, backgroundColor:'rgba(0,0,0,0.5)', justifyContent:'center', alignItems:'center'}, modalContent:{width:'90%', backgroundColor:'white', borderRadius:14, padding:18, maxHeight:'80%'}, modalTitle:{fontSize:17, fontWeight:'bold', marginBottom:12, color:'#333'},
   input:{borderWidth:1, borderColor:'#ccc', borderRadius:8, padding:10, fontSize:15, marginBottom:10, backgroundColor:'#fafafa'},
-  typeToggle:{flexDirection:'row', gap:10, marginBottom:10},
-  typeBtn:{flex:1, padding:10, borderRadius:8, backgroundColor:'#eee', alignItems:'center'}, 
-  active:{backgroundColor:'#2E7D32'}, 
-  typeTxt:{fontWeight:'600', color:'#333'},
-  modalBtns:{flexDirection:'row', justifyContent:'flex-end', gap:8}, 
-  cancel:{padding:10, backgroundColor:'#eee', borderRadius:8}, 
-  confirm:{padding:10, backgroundColor:'#2E7D32', borderRadius:8}, 
-  btnTxt:{fontSize:14, fontWeight:'600', color:'#333'}, 
+  typeToggle:{flexDirection:'row', gap:10, marginBottom:10}, typeBtn:{flex:1, padding:10, borderRadius:8, backgroundColor:'#eee', alignItems:'center'}, active:{backgroundColor:'#2E7D32'}, typeTxt:{fontWeight:'600', color:'#333'},
+  modalBtns:{flexDirection:'row', justifyContent:'flex-end', gap:8}, cancel:{padding:10, backgroundColor:'#eee', borderRadius:8}, confirm:{padding:10, backgroundColor:'#2E7D32', borderRadius:8}, btnTxt:{fontSize:14, fontWeight:'600', color:'#333'},
   center:{flex:1, justifyContent:'center', alignItems:'center'},
-  authContainer:{flex:1, backgroundColor:'#f0f4f8', justifyContent:'center'},
-  authBox:{margin:20, backgroundColor:'#fff', borderRadius:16, padding:24, elevation:4},
-  authTitle:{fontSize:28, fontWeight:'bold', textAlign:'center', color:'#2E7D32'},
-  authSub:{fontSize:14, textAlign:'center', color:'#666', marginBottom:20},
-  authToggle:{fontSize:16, fontWeight:'600', marginBottom:16, color:'#333'},
-  authInput:{borderWidth:1, borderColor:'#ccc', borderRadius:8, padding:12, marginBottom:12, fontSize:15},
-  roleBox:{flexDirection:'row', gap:10, marginBottom:12},
-  roleBtn:{flex:1, padding:10, borderRadius:8, backgroundColor:'#eee', alignItems:'center'},
-  roleActive:{backgroundColor:'#2E7D32'}, 
-  roleTxt:{fontWeight:'600', color:'#333'},
-  authBtn:{backgroundColor:'#2E7D32', padding:14, borderRadius:8, alignItems:'center', marginTop:8},
-  authBtnText:{color:'#fff', fontSize:16, fontWeight:'bold'},
+  authContainer:{flex:1, backgroundColor:'#f0f4f8', justifyContent:'center'}, authBox:{margin:20, backgroundColor:'#fff', borderRadius:16, padding:24, elevation:4},
+  authTitle:{fontSize:28, fontWeight:'bold', textAlign:'center', color:'#2E7D32'}, authSub:{fontSize:14, textAlign:'center', color:'#666', marginBottom:20}, authToggle:{fontSize:16, fontWeight:'600', marginBottom:16, color:'#333'},
+  authInput:{borderWidth:1, borderColor:'#ccc', borderRadius:8, padding:12, marginBottom:12, fontSize:15}, roleBox:{flexDirection:'row', gap:10, marginBottom:12},
+  roleBtn:{flex:1, padding:10, borderRadius:8, backgroundColor:'#eee', alignItems:'center'}, roleActive:{backgroundColor:'#2E7D32'}, roleTxt:{fontWeight:'600', color:'#333'},
+  authBtn:{backgroundColor:'#2E7D32', padding:14, borderRadius:8, alignItems:'center', marginTop:8}, authBtnText:{color:'#fff', fontSize:16, fontWeight:'bold'},
   authSwitch:{textAlign:'center', marginTop:16, color:'#1565C0', fontWeight:'500'}
 });
