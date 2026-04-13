@@ -13,7 +13,24 @@ type User = { id: number; name: string; phone: string; role: 'customer' | 'shopk
 type Shop = { id: number; name: string; shop_name: string; address: string };
 type Category = { id: number; name: string };
 type Product = { id: number; name: string; price: number; stock: number; category_id?: number };
-type Order = { id: number; item_id: number; customer_name: string; customer_phone: string; quantity: number; status: string; created_at: string; item_name?: string };
+type OrderItem = { item_name: string; quantity: number; price: number };
+type Order = { 
+  id: number; 
+  shop_id?: number;
+  customer_name: string; 
+  customer_phone: string; 
+  customer_address?: string;
+  quantity?: number;
+  items?: OrderItem[];
+  status: string; 
+  is_viewed?: boolean;
+  created_at: string; 
+  item_name?: string;
+  shop_name?: string;
+  shop_address?: string;
+  shop_phone?: string;
+  total?: number;
+};
 type ProfileData = { name: string; phone: string; address: string; name_detail?: string };
 
 export default function App() {
@@ -23,6 +40,9 @@ export default function App() {
   const [formData, setFormData] = useState({ name: '', phone: '', password: '', role: 'customer' as 'customer' | 'shopkeeper', shop_name: '', address: '' });
   const [authLoading, setAuthLoading] = useState(false);
   const [selectedShop, setSelectedShop] = useState<Shop | null>(null);
+  
+  const [currentScreen, setCurrentScreen] = useState<'main' | 'orderDetail' | 'shops'>('main');
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
   useEffect(() => { loadSession(); }, []);
 
@@ -78,13 +98,49 @@ export default function App() {
     await AsyncStorage.removeItem('kottu_user');
     await AsyncStorage.removeItem('kottu_selected_shop');
     setUser(null); setSelectedShop(null);
+    setCurrentScreen('main');
     setFormData({ name: '', phone: '', password: '', role: 'customer', shop_name: '', address: '' });
   };
 
   if(loading) return <View style={styles.center}><ActivityIndicator size="large" color="#2E7D32" /><Text style={{marginTop:10, color:'#666'}}>Connecting...</Text></View>;
   if(!user) return <AuthScreen isLogin={isLogin} setIsLogin={setIsLogin} formData={formData} setFormData={setFormData} handleAuth={handleAuth} authLoading={authLoading} />;
 
-  return <MainApp user={user} selectedShop={selectedShop} setSelectedShop={setSelectedShop} onLogout={logout} />;
+  if(currentScreen === 'orderDetail' && selectedOrder) {
+    return <OrderDetailScreen 
+      order={selectedOrder} 
+      user={user}
+      onBack={() => {setCurrentScreen('main'); setSelectedOrder(null);}} 
+      onUpdateStatus={async (status) => {
+        try {
+          await fetch(`${API_URL}/api/order/update-status?order_id=${selectedOrder.id}&status=${status}`, {method:'POST'});
+          Alert.alert('Success', `Order marked as ${status}`);
+          setCurrentScreen('main');
+          setSelectedOrder(null);
+        } catch(e: any) { Alert.alert('Error', e.message); }
+      }}
+    />;
+  }
+
+  if(currentScreen === 'shops' && user?.role === 'customer') {
+    return <ShopsListScreen 
+      onBack={() => setCurrentScreen('main')}
+      onSelectShop={(shop) => {
+        setSelectedShop(shop);
+        setCurrentScreen('main');
+      }}
+      onLogout={logout}
+    />;
+  }
+
+  return <MainApp 
+    user={user} 
+    selectedShop={selectedShop} 
+    setSelectedShop={setSelectedShop} 
+    onLogout={logout}
+    currentScreen={currentScreen}
+    setCurrentScreen={setCurrentScreen}
+    setSelectedOrder={setSelectedOrder}
+  />;
 }
 
 // ==================== AUTH SCREEN ====================
@@ -124,9 +180,160 @@ function AuthScreen({ isLogin, setIsLogin, formData, setFormData, handleAuth, au
   );
 }
 
+// ==================== SHOPS LIST SCREEN ====================
+function ShopsListScreen({ onBack, onSelectShop, onLogout }: { 
+  onBack: () => void; 
+  onSelectShop: (shop: Shop) => void;
+  onLogout: () => void;
+}) {
+  const [shops, setShops] = useState<Shop[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    fetch(`${API_URL}/api/shops`)
+      .then(r => r.json())
+      .then(data => setShops(data as Shop[]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  if(loading) return <View style={styles.center}><ActivityIndicator size="large" color="#2E7D32" /></View>;
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="dark-content" />
+      <View style={styles.header}>
+        <View style={styles.headerTop}>
+          <TouchableOpacity onPress={onBack}><Text style={styles.backBtn}>← Back</Text></TouchableOpacity>
+          <Text style={styles.headerTitle}>🛍️ Nearby Shops</Text>
+          <TouchableOpacity onPress={onLogout}><Text style={styles.logoutBtn}>🚪 Logout</Text></TouchableOpacity>
+        </View>
+      </View>
+      <FlatList 
+        data={shops} 
+        keyExtractor={i => i.id.toString()} 
+        contentContainerStyle={styles.list}
+        ListEmptyComponent={<Text style={styles.emptyText}>No shops registered yet.</Text>}
+        renderItem={({item}) => (
+          <TouchableOpacity style={styles.shopCard} onPress={() => onSelectShop(item)}>
+            <View style={styles.shopCardContent}>
+              <Text style={styles.shopCardTitle}>{item.shop_name || item.name}</Text>
+              <Text style={styles.shopCardSub}>{item.address || 'No address provided'}</Text>
+            </View>
+            <Text style={styles.shopBadge}>Tap to View</Text>
+          </TouchableOpacity>
+        )} 
+      />
+    </SafeAreaView>
+  );
+}
+
+// ==================== ORDER DETAIL SCREEN ====================
+function OrderDetailScreen({ order, user, onBack, onUpdateStatus }: { 
+  order: Order; 
+  user: User;
+  onBack: () => void;
+  onUpdateStatus: (status: string) => Promise<void>;
+}) {
+  const [statusUpdating, setStatusUpdating] = useState(false);
+  const isShopkeeper = user?.role === 'shopkeeper';
+  const newStatus = isShopkeeper ? (order.status === 'pending' ? 'delivered' : 'pending') : null;
+
+  const handleStatusUpdate = async () => {
+    if(!newStatus) return;
+    setStatusUpdating(true);
+    try {
+      await onUpdateStatus(newStatus);
+    } finally {
+      setStatusUpdating(false);
+    }
+  };
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="dark-content" />
+      <View style={styles.header}>
+        <View style={styles.headerTop}>
+          <TouchableOpacity onPress={onBack}><Text style={styles.backBtn}>← Back</Text></TouchableOpacity>
+          <Text style={styles.headerTitle}>📦 Order Details</Text>
+          <View style={{width: 60}} />
+        </View>
+      </View>
+
+      <ScrollView style={{flex:1, backgroundColor:'#F8F9FA'}} contentContainerStyle={{padding:16}}>
+        <View style={styles.detailCard}>
+          <Text style={styles.detailTitle}>Order #{order.id}</Text>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Status:</Text>
+            <Text style={[styles.statusText, order.status === 'delivered' || order.status === 'received' ? styles.statusDelivered : styles.statusPending]}>
+              {order.status === 'delivered' ? 'Delivered' : order.status === 'received' ? 'Received' : 'Pending'}
+            </Text>
+          </View>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Date:</Text>
+            <Text style={styles.detailValue}>{new Date(order.created_at).toLocaleString()}</Text>
+          </View>
+        </View>
+
+        {isShopkeeper ? (
+          <View style={styles.detailCard}>
+            <Text style={styles.detailTitle}>👤 Customer Details</Text>
+            <View style={styles.detailRow}><Text style={styles.detailLabel}>Name:</Text><Text style={styles.detailValue}>{order.customer_name}</Text></View>
+            <View style={styles.detailRow}><Text style={styles.detailLabel}>Phone:</Text><Text style={styles.detailValue}>{order.customer_phone}</Text></View>
+            {order.customer_address && <View style={styles.detailRow}><Text style={styles.detailLabel}>Address:</Text><Text style={styles.detailValue}>{order.customer_address}</Text></View>}
+          </View>
+        ) : (
+          <View style={styles.detailCard}>
+            <Text style={styles.detailTitle}>🏪 Shop Details</Text>
+            <View style={styles.detailRow}><Text style={styles.detailLabel}>Shop:</Text><Text style={styles.detailValue}>{order.shop_name}</Text></View>
+            <View style={styles.detailRow}><Text style={styles.detailLabel}>Phone:</Text><Text style={styles.detailValue}>{order.shop_phone}</Text></View>
+            {order.shop_address && <View style={styles.detailRow}><Text style={styles.detailLabel}>Address:</Text><Text style={styles.detailValue}>{order.shop_address}</Text></View>}
+          </View>
+        )}
+
+        <View style={styles.detailCard}>
+          <Text style={styles.detailTitle}>📦 Items Ordered</Text>
+          {order.items && order.items.length > 0 ? (
+            order.items.map((item, idx) => (
+              <View key={idx} style={styles.itemRowDetail}>
+                <View style={styles.itemInfoDetail}>
+                  <Text style={styles.itemNameDetail}>{item.item_name}</Text>
+                  <Text style={styles.itemQtyDetail}>Qty: {item.quantity}</Text>
+                </View>
+                <Text style={styles.itemPriceDetail}>₹{item.price * item.quantity}</Text>
+              </View>
+            ))
+          ) : (
+            <Text style={styles.emptyText}>No items</Text>
+          )}
+          {order.total && (
+            <View style={styles.totalRow}>
+              <Text style={styles.totalLabel}>Total:</Text>
+              <Text style={styles.totalValue}>₹{order.total}</Text>
+            </View>
+          )}
+        </View>
+
+        {isShopkeeper && newStatus && (
+          <TouchableOpacity 
+            style={[styles.statusBtn, statusUpdating && styles.statusBtnDisabled]} 
+            onPress={handleStatusUpdate}
+            disabled={statusUpdating}
+          >
+            <Text style={styles.statusBtnText}>
+              {statusUpdating ? 'Updating...' : `Mark as ${newStatus === 'delivered' ? 'Delivered ✓' : 'Pending'}`}
+            </Text>
+          </TouchableOpacity>
+        )}
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
 // ==================== MAIN APP ====================
-function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
+function MainApp({ user, selectedShop, setSelectedShop, onLogout, currentScreen, setCurrentScreen, setSelectedOrder }: {
   user: User; selectedShop: Shop | null; setSelectedShop: (v: Shop | null) => void; onLogout: () => Promise<void>;
+  currentScreen: string; setCurrentScreen: (v: any) => void; setSelectedOrder: (o: Order | null) => void;
 }) {
   const [role] = useState<'customer' | 'shopkeeper'>(user?.role || 'customer');
   const [shops, setShops] = useState<Shop[]>([]);
@@ -137,16 +344,16 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [shopStats, setShopStats] = useState({ total_orders: 0, recent_orders: [] as Order[] });
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState(role==='shopkeeper' ? 'inventory' : 'shops');
+  const [activeTab, setActiveTab] = useState(role==='shopkeeper' ? 'inventory' : 'inventory');
   
-  // Modals & Forms
   const [catModal, setCatModal] = useState(false);
   const [newCat, setNewCat] = useState('');
   const [itemModal, setItemModal] = useState(false);
   const [newItem, setNewItem] = useState({name:'', price:'', stock:'', category_id:''});
   const [orderModal, setOrderModal] = useState<Product | null>(null);
-  const [custName, setCustName] = useState('');
-  const [qty, setQty] = useState('1');
+  const [cart, setCart] = useState<{[key: number]: number}>({});
+  const [custName, setCustName] = useState(user?.name || '');
+  const [custAddress, setCustAddress] = useState(user?.address || '');
   const [editProfile, setEditProfile] = useState(false);
   const [profForm, setProfForm] = useState({name:'', phone:'', address:''});
 
@@ -183,8 +390,7 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
 
   useEffect(() => {
     if(role==='customer' && !selectedShop) {
-      setLoading(true);
-      fetch(`${API_URL}/api/shops`).then(r=>r.json()).then(setShops).finally(()=>setLoading(false));
+      // Fetch shops handled by ShopsListScreen
     } else if(shopId) { fetchData(); }
   }, [shopId, role, selectedShop]);
 
@@ -205,14 +411,30 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
     } catch(e: any) { Alert.alert('Error', e.message); }
   };
 
+  const addToCart = (item: Product) => {
+    setCart(prev => ({ ...prev, [item.id]: (prev[item.id] || 0) + 1 }));
+  };
+
   const placeOrder = async () => {
-    if(!custName.trim() || !orderModal || !shopId) return Alert.alert('Error', 'Enter name');
+    if(!custName.trim() || !shopId) return Alert.alert('Error', 'Enter name');
+    if(Object.keys(cart).length === 0) return Alert.alert('Error', 'Add items to cart');
+
     try {
-      const res = await fetch(`${API_URL}/api/orders?shop_id=${shopId}&item_id=${orderModal.id}&customer_name=${encodeURIComponent(custName)}&customer_phone=${user?.phone || ''}&quantity=${qty}`, {method:'POST'});
+      const itemsStr = Object.entries(cart).map(([itemId, qty]) => {
+        const item = products.find(p => p.id === parseInt(itemId));
+        return `${itemId}:${qty},${item?.price || 0}`;
+      }).join('|');
+
+      const res = await fetch(`${API_URL}/api/orders?shop_id=${shopId}&customer_name=${encodeURIComponent(custName)}&customer_phone=${user?.phone || ''}&customer_address=${encodeURIComponent(custAddress || '')}&items=${encodeURIComponent(itemsStr)}`, {method:'POST'});
       const data = await res.json();
       if(data.error) return Alert.alert('Failed', data.error);
-      Alert.alert('Success', `Ordered ${qty}x ${orderModal.name}`);
-      setOrderModal(null); setCustName(''); setQty('1'); fetchData();
+      
+      Alert.alert('Success', 'Order placed successfully!');
+      setCart({}); setCustName(user?.name || ''); fetchData();
+      if(role === 'customer') {
+        const custOrdRes = await fetch(`${API_URL}/api/customer/orders?customer_phone=${user?.phone}`).then(r=>r.json());
+        setCustomerOrders(custOrdRes as Order[]);
+      }
     } catch(e: any) { Alert.alert('Error', e.message); }
   };
 
@@ -223,11 +445,25 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
     } catch(e: any) { Alert.alert('Error', e.message); }
   };
 
-  // Group products by category
+  const handleOrderPress = (order: Order) => {
+    if(role === 'shopkeeper' && !order.is_viewed) {
+      fetch(`${API_URL}/api/order/mark-viewed?order_id=${order.id}`, {method:'POST'}).catch(()=>{});
+    }
+    setSelectedOrder(order);
+    setCurrentScreen('orderDetail');
+  };
+
   const groupedProducts = categories.map(cat => ({
     category: cat.name,
     items: products.filter(p => p.category_id === cat.id)
   }));
+
+  const cartTotal = Object.entries(cart).reduce((sum, [itemId, qty]) => {
+    const item = products.find(p => p.id === parseInt(itemId));
+    return sum + (item ? item.price * qty : 0);
+  }, 0);
+
+  const cartCount = Object.values(cart).reduce((sum, qty) => sum + qty, 0);
 
   // ==================== RENDER HELPERS ====================
   const renderShopItem = ({item}: {item: Shop}) => (
@@ -240,17 +476,30 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
     </TouchableOpacity>
   );
 
-  const renderOrderItem = ({item}: {item: Order}) => (
-    <View style={styles.orderRow}>
-      <View style={styles.orderInfo}>
-        <Text style={styles.orderText}>{item.customer_name} • {item.item_name || 'Item'}</Text>
-        <Text style={styles.orderSub}>{item.quantity}x • {new Date(item.created_at).toLocaleDateString()}</Text>
-      </View>
-      <Text style={styles.orderStatus}>{item.status}</Text>
-    </View>
-  );
+  const renderOrderItem = ({item}: {item: Order}) => {
+    const isNew = !item.is_viewed && item.status === 'pending' && role === 'shopkeeper';
+    return (
+      <TouchableOpacity style={[styles.orderRow, isNew && styles.newOrderRow]} onPress={() => handleOrderPress(item)}>
+        <View style={styles.orderInfo}>
+          <View style={styles.orderHeader}>
+            <Text style={styles.orderText}>{role === 'shopkeeper' ? item.customer_name : (item.shop_name || 'Shop')}</Text>
+            {isNew && <View style={styles.newBadge}><Text style={styles.newBadgeText}>NEW</Text></View>}
+          </View>
+          <Text style={styles.orderSub}>{item.items ? `${item.items.length} item(s)` : 'Items'} • {new Date(item.created_at).toLocaleDateString()}</Text>
+          {item.items && item.items.length > 0 && (
+            <Text style={styles.orderItems}>{item.items.map(i => `${i.item_name} x${i.quantity}`).join(', ')}</Text>
+          )}
+        </View>
+        <View style={styles.orderStatusContainer}>
+          <Text style={[styles.statusText, item.status === 'delivered' || item.status === 'received' ? styles.statusDelivered : styles.statusPending]}>
+            {item.status === 'delivered' ? 'Delivered' : item.status === 'received' ? 'Received' : 'Pending'}
+          </Text>
+          {item.total && <Text style={styles.orderTotal}>₹{item.total}</Text>}
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
-  // ==================== CUSTOMER SHOP LIST ====================
   if(role==='customer' && !selectedShop) {
     return (
       <SafeAreaView style={styles.container}>
@@ -268,7 +517,6 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
 
   if(loading) return <View style={styles.center}><ActivityIndicator size="large" color="#2E7D32" /><Text style={{marginTop:10}}>Loading...</Text></View>;
 
-  // ==================== MAIN DASHBOARD ====================
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
@@ -276,7 +524,7 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
         <View style={styles.headerTop}>
           <Text style={styles.headerTitle}>🛒 KOTTU</Text>
           {role==='shopkeeper' ? <Text style={styles.shopName}>{user?.shop_name}</Text> : 
-           <TouchableOpacity onPress={()=>setSelectedShop(null)}><Text style={styles.backBtn}>← Shops</Text></TouchableOpacity>}
+           <TouchableOpacity onPress={()=>setCurrentScreen('shops')}><Text style={styles.backBtn}>← Shops</Text></TouchableOpacity>}
         </View>
         <TouchableOpacity onPress={()=>setActiveTab('profile')}><Text style={styles.profileBtn}>👤 Profile</Text></TouchableOpacity>
       </View>
@@ -286,9 +534,9 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
           <TouchableOpacity key={tab} style={[styles.tab, activeTab===tab && styles.activeTab]} onPress={()=>setActiveTab(tab)}>
             <Text style={[styles.tabText, activeTab===tab && styles.activeTabText]}>{tab==='inventory'?'📦 Inventory':'🧾 Orders'}</Text>
           </TouchableOpacity>
-        )) : ['shops','orders'].map(tab=>(
+        )) : ['inventory','orders'].map(tab=>(
           <TouchableOpacity key={tab} style={[styles.tab, activeTab===tab && styles.activeTab]} onPress={()=>setActiveTab(tab)}>
-            <Text style={[styles.tabText, activeTab===tab && styles.activeTabText]}>{tab==='shops'?'🏪 Shops':'📜 My Orders'}</Text>
+            <Text style={[styles.tabText, activeTab===tab && styles.activeTabText]}>{tab==='inventory'?'📦 Inventory':'📜 My Orders'}</Text>
           </TouchableOpacity>
         ))}
       </View>
@@ -305,15 +553,21 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
                 <View style={styles.profileField}><Text style={styles.label}>Total Orders</Text><Text style={styles.value}>{shopStats.total_orders}</Text></View>
                 <Text style={styles.sectionTitle}>Recent Orders</Text>
                 {shopStats.recent_orders.map((o: Order) => (
-                  <View key={o.id} style={styles.miniOrder}><Text>{o.customer_name} • {o.quantity}x</Text><Text style={{color:'#666'}}>{new Date(o.created_at).toLocaleDateString()}</Text></View>
+                  <TouchableOpacity key={o.id} style={styles.miniOrder} onPress={() => handleOrderPress(o)}>
+                    <Text>{o.customer_name} • {o.items?.length || 0} item(s)</Text>
+                    <Text style={{color:'#666'}}>{new Date(o.created_at).toLocaleDateString()}</Text>
+                  </TouchableOpacity>
                 ))}
               </>
             )}
             {role==='customer' && (
               <>
                 <Text style={styles.sectionTitle}>Order History</Text>
-                {customerOrders.map((o: Order) => (
-                  <View key={o.id} style={styles.miniOrder}><Text>{o.item_name} • {o.quantity}x</Text><Text style={{color:'#666'}}>{o.status}</Text></View>
+                {customerOrders.map(o => (
+                  <TouchableOpacity key={o.id} style={styles.miniOrder} onPress={() => handleOrderPress(o)}>
+                    <Text>{o.shop_name} • {o.items?.length || 0} item(s)</Text>
+                    <Text style={{color:'#666'}}>{o.status}</Text>
+                  </TouchableOpacity>
                 ))}
               </>
             )}
@@ -360,24 +614,57 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
                 <View key={idx}>
                   <Text style={styles.sectionTitle}>{group.category}</Text>
                   {group.items.map((item) => (
-                    <TouchableOpacity key={item.id} style={styles.itemRow} onPress={()=> item.stock>0 ? setOrderModal(item) : null}>
-                      <View style={styles.itemInfo}><Text style={styles.itemName}>{item.name}</Text><Text style={styles.itemPrice}>₹{item.price}</Text></View>
-                      <Text style={[styles.stockBadge, item.stock>5?styles.stockOk:item.stock>0?styles.stockLow:styles.stockOut]}>
-                        {item.stock>0 ? `${item.stock} Left` : '❌ Out'}
-                      </Text>
-                    </TouchableOpacity>
+                    <View key={item.id} style={styles.itemRow}>
+                      <View style={styles.itemInfo}>
+                        <Text style={styles.itemName}>{item.name}</Text>
+                        <Text style={styles.itemPrice}>₹{item.price}</Text>
+                      </View>
+                      <View style={styles.itemActions}>
+                        {cart[item.id] ? (
+                          <View style={styles.cartControls}>
+                            <TouchableOpacity style={styles.cartBtn} onPress={()=>setCart(prev => ({...prev, [item.id]: Math.max(0, (prev[item.id]||0) - 1)}))}>
+                              <Text style={styles.cartBtnText}>−</Text>
+                            </TouchableOpacity>
+                            <Text style={styles.cartCount}>{cart[item.id]}</Text>
+                            <TouchableOpacity style={styles.cartBtn} onPress={()=>addToCart(item)}>
+                              <Text style={styles.cartBtnText}>+</Text>
+                            </TouchableOpacity>
+                          </View>
+                        ) : (
+                          <TouchableOpacity style={styles.addToCartBtn} onPress={()=>addToCart(item)} disabled={item.stock === 0}>
+                            <Text style={styles.addToCartText}>{item.stock > 0 ? 'Add' : 'Out'}</Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    </View>
                   ))}
                 </View>
               ))
+            )}
+            
+            {cartCount > 0 && (
+              <View style={styles.cartSummary}>
+                <View style={styles.cartSummaryRow}>
+                  <Text style={styles.cartSummaryText}>Total ({cartCount} items):</Text>
+                  <Text style={styles.cartSummaryTotal}>₹{cartTotal}</Text>
+                </View>
+                <TouchableOpacity style={styles.checkoutBtn} onPress={placeOrder}>
+                  <Text style={styles.checkoutBtnText}>Place Order</Text>
+                </TouchableOpacity>
+              </View>
             )}
           </View>
         )}
 
         {activeTab==='orders' && (
           <View>
-            <FlatList data={role==='shopkeeper' ? orders : customerOrders} keyExtractor={i=>i.id.toString()} scrollEnabled={false}
+            <FlatList 
+              data={role==='shopkeeper' ? orders : customerOrders} 
+              keyExtractor={i=>i.id.toString()} 
+              scrollEnabled={false}
               ListEmptyComponent={<Text style={styles.emptyText}>No orders yet.</Text>}
-              renderItem={renderOrderItem} />
+              renderItem={renderOrderItem} 
+            />
           </View>
         )}
       </ScrollView>
@@ -396,15 +683,6 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
           <TextInput style={styles.input} keyboardType="numeric" placeholder="Price (₹)" value={newItem.price} onChangeText={v=>setNewItem({...newItem, price:v})}/>
           <TextInput style={styles.input} keyboardType="numeric" placeholder="Stock" value={newItem.stock} onChangeText={v=>setNewItem({...newItem, stock:v})}/>
           <View style={styles.modalBtns}><TouchableOpacity style={styles.cancel} onPress={()=>setItemModal(false)}><Text style={styles.btnTxt}>Cancel</Text></TouchableOpacity><TouchableOpacity style={styles.confirm} onPress={addItem}><Text style={[styles.btnTxt,{color:'#fff'}]}>Add</Text></TouchableOpacity></View>
-        </View></View>
-      </Modal>
-
-      <Modal visible={!!orderModal} transparent animationType="slide">
-        <View style={styles.modalOverlay}><View style={styles.modalContent}><Text style={styles.modalTitle}>Place Order</Text>
-          <Text style={{marginBottom:10}}>{orderModal?.name} - ₹{orderModal?.price}</Text>
-          <TextInput style={styles.input} placeholder="Your Name" value={custName} onChangeText={setCustName}/>
-          <TextInput style={styles.input} keyboardType="numeric" placeholder="Qty" value={qty} onChangeText={setQty}/>
-          <View style={styles.modalBtns}><TouchableOpacity style={styles.cancel} onPress={()=>setOrderModal(null)}><Text style={styles.btnTxt}>Cancel</Text></TouchableOpacity><TouchableOpacity style={styles.confirm} onPress={placeOrder}><Text style={[styles.btnTxt,{color:'#fff'}]}>Order</Text></TouchableOpacity></View>
         </View></View>
       </Modal>
 
@@ -431,22 +709,67 @@ const styles = StyleSheet.create({
   tab:{flex:1, padding:10, alignItems:'center', borderRadius:8, marginHorizontal:2}, 
   activeTab:{backgroundColor:'#E8F5E9'}, tabText:{fontSize:13, color:'#666'}, activeTabText:{color:'#2E7D32', fontWeight:'600'},
   list:{padding:12, paddingBottom:80},
-  card:{backgroundColor:'#fff', padding:16, borderRadius:12, marginBottom:12, flexDirection:'row', justifyContent:'space-between', alignItems:'center', elevation:2, shadowColor:'#000', shadowOpacity:0.05, shadowRadius:4},
+  card:{backgroundColor:'#fff', padding:16, borderRadius:12, marginBottom:12, flexDirection:'row', justifyContent:'space-between', alignItems:'center', elevation:2},
   cardContent:{flex:1}, cardTitle:{fontSize:16, fontWeight:'600', color:'#111'}, cardSub:{fontSize:13, color:'#666', marginTop:2},
   badge:{backgroundColor:'#E8F5E9', color:'#2E7D32', paddingHorizontal:10, paddingVertical:4, borderRadius:12, fontSize:12, fontWeight:'600'},
+  shopCard:{backgroundColor:'#fff', padding:16, borderRadius:12, marginBottom:12, flexDirection:'row', justifyContent:'space-between', alignItems:'center', elevation:2},
+  shopCardContent:{flex:1}, shopCardTitle:{fontSize:16, fontWeight:'600', color:'#111'}, shopCardSub:{fontSize:13, color:'#666', marginTop:2},
+  shopBadge:{backgroundColor:'#E8F5E9', color:'#2E7D32', paddingHorizontal:10, paddingVertical:4, borderRadius:12, fontSize:12, fontWeight:'600'},
   section:{marginBottom:20}, sectionTitle:{fontSize:17, fontWeight:'600', color:'#333', marginBottom:10, marginTop:4},
   itemRow:{backgroundColor:'#fff', padding:14, borderRadius:10, marginBottom:8, flexDirection:'row', justifyContent:'space-between', alignItems:'center', elevation:1},
   itemInfo:{flex:1}, itemName:{fontSize:15, fontWeight:'500', color:'#333'}, itemPrice:{fontSize:14, color:'#2E7D32', fontWeight:'600', marginTop:2},
-  stockBadge:{paddingHorizontal:8, paddingVertical:3, borderRadius:8, fontSize:11, fontWeight:'600'}, stockOk:{backgroundColor:'#E8F5E9', color:'#2E7D32'}, stockLow:{backgroundColor:'#FFF3E0', color:'#E65100'}, stockOut:{backgroundColor:'#FFEBEE', color:'#C62828'},
-  orderRow:{backgroundColor:'#fff', padding:14, borderRadius:10, marginBottom:8, flexDirection:'row', justifyContent:'space-between', alignItems:'center'},
-  orderInfo:{flex:1}, orderText:{fontSize:14, fontWeight:'500', color:'#333'}, orderSub:{fontSize:12, color:'#666', marginTop:2}, orderStatus:{fontSize:12, color:'#2E7D32', fontWeight:'600'},
-  profileCard:{backgroundColor:'#fff', padding:16, borderRadius:12, elevation:2}, profileTitle:{fontSize:18, fontWeight:'bold', color:'#333', marginBottom:12},
+  itemActions:{flexDirection:'row', alignItems:'center'},
+  addToCartBtn:{backgroundColor:'#4A90E2', paddingHorizontal:16, paddingVertical:8, borderRadius:8},
+  addToCartText:{color:'#fff', fontWeight:'600', fontSize:13},
+  cartControls:{flexDirection:'row', alignItems:'center', backgroundColor:'#E8F5E9', borderRadius:8},
+  cartBtn:{width:32, height:32, justifyContent:'center', alignItems:'center'},
+  cartBtnText:{fontSize:18, color:'#2E7D32', fontWeight:'bold'},
+  cartCount:{marginHorizontal:12, fontSize:16, fontWeight:'600', color:'#2E7D32'},
+  cartSummary:{backgroundColor:'#fff', padding:16, borderRadius:12, marginTop:12, elevation:2},
+  cartSummaryRow:{flexDirection:'row', justifyContent:'space-between', marginBottom:12},
+  cartSummaryText:{fontSize:16, fontWeight:'600', color:'#333'},
+  cartSummaryTotal:{fontSize:18, fontWeight:'bold', color:'#2E7D32'},
+  checkoutBtn:{backgroundColor:'#2E7D32', padding:14, borderRadius:10, alignItems:'center'},
+  checkoutBtnText:{color:'#fff', fontSize:16, fontWeight:'bold'},
+  orderRow:{backgroundColor:'#fff', padding:14, borderRadius:10, marginBottom:8, flexDirection:'row', justifyContent:'space-between', alignItems:'center', elevation:1},
+  newOrderRow:{borderLeftWidth:4, borderLeftColor:'#FF6B6B', backgroundColor:'#FFF5F5'},
+  orderInfo:{flex:1}, 
+  orderHeader:{flexDirection:'row', alignItems:'center', marginBottom:4},
+  orderText:{fontSize:14, fontWeight:'600', color:'#333'},
+  orderSub:{fontSize:12, color:'#666'},
+  orderItems:{fontSize:12, color:'#4A90E2', marginTop:4, fontWeight:'500'},
+  orderStatusContainer:{alignItems:'flex-end'},
+  orderStatus:{fontSize:12, paddingHorizontal:8, paddingVertical:3, borderRadius:8, fontWeight:'600'},
+  statusText:{fontSize:12, fontWeight:'bold', paddingHorizontal:8, paddingVertical:3, borderRadius:8},
+  statusPending:{backgroundColor:'#FFF3E0', color:'#E65100'},
+  statusDelivered:{backgroundColor:'#E8F5E9', color:'#2E7D32'},
+  orderTotal:{fontSize:14, fontWeight:'bold', color:'#2E7D32', marginTop:4},
+  newBadge:{backgroundColor:'#FF6B6B', paddingHorizontal:6, paddingVertical:2, borderRadius:4, marginLeft:8},
+  newBadgeText:{color:'#fff', fontSize:10, fontWeight:'bold'},
+  profileCard:{backgroundColor:'#fff', padding:16, borderRadius:12, elevation:2}, 
+  profileTitle:{fontSize:18, fontWeight:'bold', color:'#333', marginBottom:12},
   profileField:{marginBottom:12}, label:{fontSize:12, color:'#666', marginBottom:2}, value:{fontSize:15, color:'#333', fontWeight:'500'},
   miniOrder:{padding:10, backgroundColor:'#F8F9FA', borderRadius:8, marginBottom:6, flexDirection:'row', justifyContent:'space-between'},
   editBtn:{marginTop:12, padding:12, backgroundColor:'#2E7D32', borderRadius:8, alignItems:'center'},
   addBtn:{margin:12, padding:12, backgroundColor:'#4A90E2', borderRadius:10, alignItems:'center'},
   catHeader:{flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:8}, catTitle:{fontSize:16, fontWeight:'600', color:'#333'}, addItemLink:{color:'#4A90E2', fontSize:13, fontWeight:'600'},
   emptyText:{textAlign:'center', color:'#888', marginTop:20, fontSize:14},
+  detailCard:{backgroundColor:'#fff', padding:16, borderRadius:12, marginBottom:12, elevation:2},
+  detailTitle:{fontSize:16, fontWeight:'bold', color:'#333', marginBottom:12},
+  detailRow:{flexDirection:'row', justifyContent:'space-between', marginBottom:8},
+  detailLabel:{fontSize:13, color:'#666'},
+  detailValue:{fontSize:14, color:'#333', fontWeight:'500'},
+  itemRowDetail:{flexDirection:'row', justifyContent:'space-between', paddingVertical:8, borderBottomWidth:1, borderBottomColor:'#F0F0F0'},
+  itemInfoDetail:{flex:1},
+  itemNameDetail:{fontSize:14, fontWeight:'500', color:'#333'},
+  itemQtyDetail:{fontSize:12, color:'#666', marginTop:2},
+  itemPriceDetail:{fontSize:14, fontWeight:'600', color:'#2E7D32'},
+  totalRow:{flexDirection:'row', justifyContent:'space-between', marginTop:12, paddingTop:12, borderTopWidth:2, borderTopColor:'#E8F5E9'},
+  totalLabel:{fontSize:15, fontWeight:'bold', color:'#333'},
+  totalValue:{fontSize:18, fontWeight:'bold', color:'#2E7D32'},
+  statusBtn:{marginTop:16, padding:14, backgroundColor:'#2E7D32', borderRadius:10, alignItems:'center'},
+  statusBtnDisabled:{backgroundColor:'#A5D6A7'},
+  statusBtnText:{color:'#fff', fontSize:16, fontWeight:'bold'},
   modalOverlay:{flex:1, backgroundColor:'rgba(0,0,0,0.4)', justifyContent:'center', alignItems:'center'}, 
   modalContent:{width:'88%', backgroundColor:'#fff', borderRadius:16, padding:18, maxHeight:'75%'},
   modalTitle:{fontSize:18, fontWeight:'bold', marginBottom:12, color:'#333'}, 
