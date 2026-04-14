@@ -178,6 +178,22 @@ def add_item(shop_id: int, name: str, price: int, stock: int, category_id: int =
         conn.commit(); conn.close()
     return {"status": "added"}
 
+# Add this new endpoint in backend/main.py
+@app.post("/api/inventory/update-stock")
+def update_stock_endpoint(shop_id: int, item_id: int, stock: int):
+    try:
+        if USE_POSTGRES:
+            cur, conn = get_db()
+            cur.execute("UPDATE inventory SET stock = %s WHERE id = %s AND shop_id = %s", (stock, item_id, shop_id))
+            conn.commit(); cur.close(); conn.close()
+        else:
+            conn, _ = get_db()
+            conn.execute("UPDATE inventory SET stock = ? WHERE id = ? AND shop_id = ?", (stock, item_id, shop_id))
+            conn.commit(); conn.close()
+        return {"status": "updated", "stock": stock}
+    except Exception as e:
+        return {"error": str(e)}
+
 # ==================== ORDERS ====================
 @app.post("/api/orders")
 async def place_order(shop_id: int, item_id: int, customer_name: str, customer_phone: str, customer_address: str, quantity: int):

@@ -239,10 +239,13 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
     } catch(e: any) { Alert.alert('Error', e.message); }
   };
 
-  const updateStock = async () => {
+    const updateStock = async () => {
     if(!editingItem || !newStock || parseInt(newStock) < 0) return Alert.alert('Error', 'Enter valid stock quantity');
     try {
-      await fetch(`${API_URL}/api/inventory/add?shop_id=${shopId}&name=${encodeURIComponent(editingItem.name)}&price=${editingItem.price}&stock=${parseInt(newStock)}&category_id=${editingItem.category_id || ''}`, {method:'POST'});
+      // Use the update endpoint instead of add
+      const res = await fetch(`${API_URL}/api/inventory/update-stock?shop_id=${shopId}&item_id=${editingItem.id}&stock=${parseInt(newStock)}`, {method:'POST'});
+      const data = await res.json();
+      if(data.error) throw new Error(data.error);
       Alert.alert('Success', 'Stock updated');
       setEditStockModal(false);
       setEditingItem(null);
@@ -309,18 +312,19 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
     </TouchableOpacity>
   );
 
-  const renderOrderItem = ({item}: {item: Order}) => {
+    const renderOrderItem = ({item}: {item: Order}) => {
     const isNew = !item.is_viewed && item.status === 'pending' && role === 'shopkeeper';
     
     // Calculate total safely
     const calculateTotal = () => {
       if (!item.items || item.items.length === 0) return 0;
       const total = item.items.reduce((sum, i) => {
-        const price = typeof i.price === 'number' ? i.price : parseFloat(i.price) || 0;
-        const qty = typeof i.quantity === 'number' ? i.quantity : parseInt(i.quantity) || 0;
+        const price = (typeof i.price === 'number') ? i.price : (i.price ? parseFloat(i.price) : 0);
+        const qty = (typeof i.quantity === 'number') ? i.quantity : (i.quantity ? parseInt(i.quantity) : 0);
+        if (isNaN(price) || isNaN(qty)) return sum;
         return sum + (price * qty);
       }, 0);
-      return total;
+      return isNaN(total) ? 0 : total;
     };
     
     const orderTotal = calculateTotal();
@@ -339,7 +343,7 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
         </Text>
         <View style={styles.orderFooter}>
           <Text style={styles.orderDate}>{new Date(item.created_at).toLocaleString()}</Text>
-          <Text style={styles.orderTotal}>₹{orderTotal}</Text>
+          <Text style={styles.orderTotal}>₹{orderTotal > 0 ? orderTotal : '0'}</Text>
         </View>
       </TouchableOpacity>
     );
