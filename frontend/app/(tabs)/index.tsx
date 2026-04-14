@@ -28,7 +28,7 @@ type Order = {
   shop_address?: string;
   shop_phone?: string;
 };
-type ProfileData = { name: string; phone: string; address: string; name_detail?: string };
+type ProfileData = { name: string; phone: string; address: string; shop_name?: string };
 
 export default function App() {
   const [user, setUser] = useState<User>(null);
@@ -38,6 +38,7 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(false);
   const [selectedShop, setSelectedShop] = useState<Shop | null>(null);
 
+  // Auto-login / Session Persistence
   useEffect(() => { loadSession(); }, []);
 
   const loadSession = async () => {
@@ -88,11 +89,13 @@ export default function App() {
     finally { setAuthLoading(false); }
   };
 
+  // Logout clears session. App will show login screen next time.
   const logout = async () => {
     await AsyncStorage.removeItem('kottu_user');
     await AsyncStorage.removeItem('kottu_selected_shop');
     setUser(null); setSelectedShop(null);
     setFormData({ name: '', phone: '', password: '', role: 'customer', shop_name: '', address: '' });
+    setIsLogin(true);
   };
 
   if(loading) return <View style={styles.center}><ActivityIndicator size="large" color="#2E7D32" /><Text style={{marginTop:10, color:'#666'}}>Connecting...</Text></View>;
@@ -125,7 +128,7 @@ function AuthScreen({ isLogin, setIsLogin, formData, setFormData, handleAuth, au
                 <TouchableOpacity style={[styles.roleBtn, formData.role==='shopkeeper' && styles.roleActive]} onPress={()=>setFormData({...formData, role:'shopkeeper'})}><Text style={styles.roleTxt}>🏪 Shopkeeper</Text></TouchableOpacity>
               </View>
               {formData.role==='shopkeeper' && <TextInput style={styles.authInput} placeholder="Shop Name" value={formData.shop_name} onChangeText={v=>setFormData({...formData, shop_name:v})} />}
-              <TextInput style={styles.authInput} placeholder="Address (Optional)" value={formData.address} onChangeText={v=>setFormData({...formData, address:v})} />
+              <TextInput style={styles.authInput} placeholder="Address" value={formData.address} onChangeText={v=>setFormData({...formData, address:v})} />
             </>
           )}
           <TouchableOpacity style={styles.authBtn} onPress={handleAuth} disabled={authLoading}>
@@ -149,7 +152,6 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
   const [orders, setOrders] = useState<Order[]>([]);
   const [customerOrders, setCustomerOrders] = useState<Order[]>([]);
   const [profile, setProfile] = useState<ProfileData | null>(null);
-  const [shopStats, setShopStats] = useState({ total_orders: 0, recent_orders: [] as Order[] });
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(role==='shopkeeper' ? 'inventory' : 'inventory');
   
@@ -159,10 +161,8 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
   const [itemModal, setItemModal] = useState(false);
   const [newItem, setNewItem] = useState({name:'', price:'', stock:'', category_id:''});
   const [orderModal, setOrderModal] = useState<Product | null>(null);
-  const [custName, setCustName] = useState('');
+  const [custName, setCustName] = useState(user?.name || '');
   const [qty, setQty] = useState('1');
-  const [editProfile, setEditProfile] = useState(false);
-  const [profForm, setProfForm] = useState({name:'', phone:'', address:''});
   
   // Order Detail Modal
   const [showOrderDetail, setShowOrderDetail] = useState(false);
@@ -181,17 +181,13 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
       setProducts(pRes as Product[]);
       setCategories(catRes as Category[]);
       
+      const profRes = await fetch(`${API_URL}/api/profile?user_id=${user?.id}&role=${role}`).then(r=>r.json());
+      setProfile(profRes?.profile || null);
+
       if(role === 'shopkeeper') {
-        const [statsRes, ordRes] = await Promise.all([
-          fetch(`${API_URL}/api/profile?user_id=${user?.id}&role=shopkeeper`).then(r=>r.json()),
-          fetch(`${API_URL}/api/orders?shop_id=${shopId}`).then(r=>r.json())
-        ]);
-        setShopStats(statsRes);
+        const ordRes = await fetch(`${API_URL}/api/orders?shop_id=${shopId}`).then(r=>r.json());
         setOrders(ordRes as Order[]);
-        setProfile(statsRes.profile);
       } else {
-        const profRes = await fetch(`${API_URL}/api/profile?user_id=${user?.id}&role=customer`).then(r=>r.json());
-        setProfile(profRes.profile);
         const custOrdRes = await fetch(`${API_URL}/api/customer/orders?customer_phone=${user?.phone}`).then(r=>r.json());
         setCustomerOrders(custOrdRes as Order[]);
       }
@@ -224,20 +220,16 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
   };
 
   const placeOrder = async () => {
-    if(!custName.trim() || !orderModal || !shopId) return Alert.alert('Error', 'Enter name');
+    const finalName = custName.trim() || user?.name || 'Guest';
+    if(!finalName || !orderModal || !shopId) return Alert.alert('Error', 'Enter your name');
+    if(!qty || parseInt(qty) <= 0) return Alert.alert('Error', 'Enter valid quantity');
+    
     try {
-      const res = await fetch(`${API_URL}/api/orders?shop_id=${shopId}&item_id=${orderModal.id}&customer_name=${encodeURIComponent(custName)}&customer_phone=${user?.phone || ''}&customer_address=${encodeURIComponent(user?.address || '')}&quantity=${qty}`, {method:'POST'});
+      const res = await fetch(`${API_URL}/api/orders?shop_id=${shopId}&item_id=${orderModal.id}&customer_name=${encodeURIComponent(finalName)}&customer_phone=${user?.phone || ''}&customer_address=${encodeURIComponent(user?.address || '')}&quantity=${parseInt(qty)}`, {method:'POST'});
       const data = await res.json();
       if(data.error) return Alert.alert('Failed', data.error);
       Alert.alert('Success', `Ordered ${qty}x ${orderModal.name}`);
-      setOrderModal(null); setCustName(''); setQty('1'); fetchData();
-    } catch(e: any) { Alert.alert('Error', e.message); }
-  };
-
-  const updateProfile = async () => {
-    try {
-      await fetch(`${API_URL}/api/profile/update?user_id=${user?.id}&name=${encodeURIComponent(profForm.name)}&phone=${profForm.phone}&address=${encodeURIComponent(profForm.address)}`, {method:'POST'});
-      setEditProfile(false); fetchData();
+      setOrderModal(null); setCustName(user?.name || ''); setQty('1'); fetchData();
     } catch(e: any) { Alert.alert('Error', e.message); }
   };
 
@@ -300,7 +292,7 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
           </Text>
         </View>
         <View style={styles.orderStatusContainer}>
-          <Text style={[styles.orderStatus, item.status === 'delivered' ? styles.statusDelivered : styles.statusPending]}>
+          <Text style={[styles.orderStatus, item.status === 'delivered' ? styles.statusDelivered : item.status === 'received' ? styles.statusReceived : styles.statusPending]}>
             {item.status === 'delivered' ? 'Delivered' : item.status === 'received' ? 'Received' : 'Pending'}
           </Text>
         </View>
@@ -314,8 +306,11 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="dark-content" />
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>🛍️ Nearby Shops</Text>
-          <TouchableOpacity onPress={onLogout}><Text style={styles.logoutBtn}>🚪 Logout</Text></TouchableOpacity>
+          <Text style={styles.headerTitle}>🛒 KOTTU</Text>
+          <View style={styles.headerRight}>
+            <TouchableOpacity onPress={()=>setActiveTab('profile')}><Text style={styles.headerUser}>👤 {user?.name}</Text></TouchableOpacity>
+            <TouchableOpacity onPress={onLogout}><Text style={styles.headerLogout}>🚪 Logout</Text></TouchableOpacity>
+          </View>
         </View>
         <FlatList data={shops} keyExtractor={i=>i.id.toString()} contentContainerStyle={styles.list}
           ListEmptyComponent={<Text style={styles.emptyText}>No shops registered yet.</Text>}
@@ -330,18 +325,17 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
       <View style={styles.header}>
-        <View style={styles.headerTop}>
-          <Text style={styles.headerTitle}>🛒 KOTTU</Text>
-          {role==='shopkeeper' ? <Text style={styles.shopName}>{user?.shop_name}</Text> : 
-           <TouchableOpacity onPress={()=>{setActiveTab('shops'); setSelectedShop(null);}}><Text style={styles.backBtn}>← Shops</Text></TouchableOpacity>}
+        <Text style={styles.headerTitle}>🛒 KOTTU</Text>
+        <View style={styles.headerRight}>
+          <TouchableOpacity onPress={()=>setActiveTab('profile')}><Text style={styles.headerUser}>👤 {user?.name}</Text></TouchableOpacity>
+          <TouchableOpacity onPress={onLogout}><Text style={styles.headerLogout}>🚪 Logout</Text></TouchableOpacity>
         </View>
-        <TouchableOpacity onPress={()=>setActiveTab('profile')}><Text style={styles.profileBtn}>👤 Profile</Text></TouchableOpacity>
       </View>
 
       <View style={styles.tabs}>
-        {role==='shopkeeper' ? ['inventory','orders','udhaar','alerts'].map(tab=>(
+        {role==='shopkeeper' ? ['inventory','orders'].map(tab=>(
           <TouchableOpacity key={tab} style={[styles.tab, activeTab===tab && styles.activeTab]} onPress={()=>setActiveTab(tab)}>
-            <Text style={[styles.tabText, activeTab===tab && styles.activeTabText]}>{tab==='inventory'?'📦 Inventory':tab==='orders'?'🧾 Orders':tab==='udhaar'?'📒 Udhaar':'🔔 Alerts'}</Text>
+            <Text style={[styles.tabText, activeTab===tab && styles.activeTabText]}>{tab==='inventory'?'📦 Inventory':' Orders'}</Text>
           </TouchableOpacity>
         )) : ['inventory','orders'].map(tab=>(
           <TouchableOpacity key={tab} style={[styles.tab, activeTab===tab && styles.activeTab]} onPress={()=>setActiveTab(tab)}>
@@ -351,45 +345,18 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
       </View>
 
       <ScrollView style={{flex:1, backgroundColor:'#F8F9FA'}} contentContainerStyle={{padding:12, paddingBottom:80}}>
+        {/* READ-ONLY PROFILE */}
         {activeTab==='profile' && (
           <View style={styles.profileCard}>
             <Text style={styles.profileTitle}>👤 Profile</Text>
             <View style={styles.profileField}><Text style={styles.label}>Name</Text><Text style={styles.value}>{profile?.name || user?.name}</Text></View>
             <View style={styles.profileField}><Text style={styles.label}>Phone</Text><Text style={styles.value}>{profile?.phone || user?.phone}</Text></View>
-            <View style={styles.profileField}><Text style={styles.label}>Address</Text><Text style={styles.value}>{profile?.address || 'Not set'}</Text></View>
-            {role==='shopkeeper' && (
-              <>
-                <View style={styles.profileField}><Text style={styles.label}>Total Orders</Text><Text style={styles.value}>{shopStats.total_orders}</Text></View>
-                <Text style={styles.sectionTitle}>Recent Orders</Text>
-                {shopStats.recent_orders.map((o: Order) => (
-                  <TouchableOpacity key={o.id} style={styles.miniOrder} onPress={() => viewOrderDetail(o.id)}>
-                    <Text>{o.customer_name} • {o.items?.length || 0} item(s)</Text>
-                    <Text style={{color:'#666'}}>{new Date(o.created_at).toLocaleDateString()}</Text>
-                  </TouchableOpacity>
-                ))}
-              </>
+            <View style={styles.profileField}><Text style={styles.label}>Address</Text><Text style={styles.value}>{profile?.address || user?.address || 'Not set'}</Text></View>
+            {role==='shopkeeper' && profile?.shop_name && (
+              <View style={styles.profileField}><Text style={styles.label}>Shop Name</Text><Text style={styles.value}>{profile.shop_name}</Text></View>
             )}
-            {role==='customer' && (
-              <>
-                <Text style={styles.sectionTitle}>Order History</Text>
-                {customerOrders.map(o => (
-                  <TouchableOpacity key={o.id} style={styles.miniOrder} onPress={() => viewOrderDetail(o.id)}>
-                    <Text>{o.shop_name} • {o.items?.length || 0} item(s)</Text>
-                    <Text style={{color:'#666'}}>{o.status}</Text>
-                  </TouchableOpacity>
-                ))}
-              </>
-            )}
-            <TouchableOpacity style={styles.editBtn} onPress={()=>{setEditProfile(true); setProfForm({name: profile?.name||'', phone: profile?.phone||'', address: profile?.address||''});}}>
-              <Text style={{color:'#fff', fontWeight:'bold'}}>✏️ Edit Profile</Text>
-            </TouchableOpacity>
+            <Text style={{marginTop:12, fontSize:12, color:'#888', textAlign:'center'}}>Profile details cannot be edited after registration.</Text>
           </View>
-        )}
-
-        {activeTab==='shops' && role==='customer' && (
-          <FlatList data={shops} keyExtractor={i=>i.id.toString()} contentContainerStyle={styles.list}
-            ListEmptyComponent={<Text style={styles.emptyText}>No shops registered yet.</Text>}
-            renderItem={renderShopItem} />
         )}
 
         {activeTab==='inventory' && role==='shopkeeper' && (
@@ -453,18 +420,6 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
             />
           </View>
         )}
-
-        {activeTab==='udhaar' && (
-          <View>
-            <Text style={styles.emptyText}>Udhaar feature - Coming soon</Text>
-          </View>
-        )}
-
-        {activeTab==='alerts' && (
-          <View>
-            <Text style={styles.emptyText}>Alerts feature - Coming soon</Text>
-          </View>
-        )}
       </ScrollView>
 
       {/* ==================== MODALS ==================== */}
@@ -490,15 +445,6 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
           <TextInput style={styles.input} placeholder="Your Name" value={custName} onChangeText={setCustName}/>
           <TextInput style={styles.input} keyboardType="numeric" placeholder="Qty" value={qty} onChangeText={setQty}/>
           <View style={styles.modalBtns}><TouchableOpacity style={styles.cancel} onPress={()=>setOrderModal(null)}><Text style={styles.btnTxt}>Cancel</Text></TouchableOpacity><TouchableOpacity style={styles.confirm} onPress={placeOrder}><Text style={[styles.btnTxt,{color:'#fff'}]}>Order</Text></TouchableOpacity></View>
-        </View></View>
-      </Modal>
-
-      <Modal visible={editProfile} transparent animationType="slide">
-        <View style={styles.modalOverlay}><View style={styles.modalContent}><Text style={styles.modalTitle}>✏️ Edit Profile</Text>
-          <TextInput style={styles.input} placeholder="Name" value={profForm.name} onChangeText={v=>setProfForm({...profForm, name:v})}/>
-          <TextInput style={styles.input} placeholder="Phone" value={profForm.phone} onChangeText={v=>setProfForm({...profForm, phone:v})}/>
-          <TextInput style={styles.input} placeholder="Address" value={profForm.address} onChangeText={v=>setProfForm({...profForm, address:v})}/>
-          <View style={styles.modalBtns}><TouchableOpacity style={styles.cancel} onPress={()=>setEditProfile(false)}><Text style={styles.btnTxt}>Cancel</Text></TouchableOpacity><TouchableOpacity style={styles.confirm} onPress={updateProfile}><Text style={[styles.btnTxt,{color:'#fff'}]}>Save</Text></TouchableOpacity></View>
         </View></View>
       </Modal>
 
@@ -571,9 +517,10 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
 const styles = StyleSheet.create({
   container:{flex:1, backgroundColor:'#F8F9FA'}, 
   header:{padding:16, backgroundColor:'#2E7D32', borderBottomLeftRadius:16, borderBottomRightRadius:16},
-  headerTop:{flexDirection:'row', justifyContent:'space-between', alignItems:'center'}, 
-  headerTitle:{fontSize:22, fontWeight:'bold', color:'#fff'},
-  shopName:{fontSize:14, color:'#E8F5E9', fontWeight:'600'}, backBtn:{color:'#fff', fontSize:14}, profileBtn:{color:'#fff', fontSize:14}, logoutBtn:{color:'#fff', fontSize:14},
+  headerTitle:{fontSize:22, fontWeight:'bold', color:'#fff', marginBottom:4},
+  headerRight:{flexDirection:'row', justifyContent:'space-between', alignItems:'center'},
+  headerUser:{color:'#E8F5E9', fontSize:14, fontWeight:'600'},
+  headerLogout:{color:'#FFCDD2', fontSize:14, fontWeight:'600'},
   tabs:{flexDirection:'row', backgroundColor:'#fff', padding:8, borderBottomWidth:1, borderBottomColor:'#EAECEF'},
   tab:{flex:1, padding:10, alignItems:'center', borderRadius:8, marginHorizontal:2}, 
   activeTab:{backgroundColor:'#E8F5E9'}, tabText:{fontSize:13, color:'#666'}, activeTabText:{color:'#2E7D32', fontWeight:'600'},
@@ -595,12 +542,12 @@ const styles = StyleSheet.create({
   orderStatus:{fontSize:12, paddingHorizontal:8, paddingVertical:3, borderRadius:8, fontWeight:'600'},
   statusPending:{backgroundColor:'#FFF3E0', color:'#E65100'},
   statusDelivered:{backgroundColor:'#E8F5E9', color:'#2E7D32'},
+  statusReceived:{backgroundColor:'#E3F2FD', color:'#1565C0'},
   newBadge:{backgroundColor:'#FF6B6B', paddingHorizontal:6, paddingVertical:2, borderRadius:4, marginLeft:8},
   newBadgeText:{color:'#fff', fontSize:10, fontWeight:'bold'},
   profileCard:{backgroundColor:'#fff', padding:16, borderRadius:12, elevation:2}, 
   profileTitle:{fontSize:18, fontWeight:'bold', color:'#333', marginBottom:12},
   profileField:{marginBottom:12}, label:{fontSize:12, color:'#666', marginBottom:2}, value:{fontSize:15, color:'#333', fontWeight:'500'},
-  miniOrder:{padding:10, backgroundColor:'#F8F9FA', borderRadius:8, marginBottom:6, flexDirection:'row', justifyContent:'space-between'},
   editBtn:{marginTop:12, padding:12, backgroundColor:'#2E7D32', borderRadius:8, alignItems:'center'},
   addBtn:{margin:12, padding:12, backgroundColor:'#4A90E2', borderRadius:10, alignItems:'center'},
   catHeader:{flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:8}, catTitle:{fontSize:16, fontWeight:'600', color:'#333'}, addItemLink:{color:'#4A90E2', fontSize:13, fontWeight:'600'},
