@@ -182,6 +182,11 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
   
   const [showOrderDetail, setShowOrderDetail] = useState(false);
   const [selectedOrderDetail, setSelectedOrderDetail] = useState<any>(null);
+  
+  // Stock update modal
+  const [editStockModal, setEditStockModal] = useState(false);
+  const [editingItem, setEditingItem] = useState<Product | null>(null);
+  const [newStock, setNewStock] = useState('');
 
   const shopId = role === 'shopkeeper' ? user?.id : (selectedShop?.id || null);
 
@@ -231,6 +236,18 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
       const catId = newItem.category_id ? parseInt(newItem.category_id) : null;
       await fetch(`${API_URL}/api/inventory/add?shop_id=${shopId}&name=${encodeURIComponent(newItem.name)}&price=${newItem.price}&stock=${newItem.stock}&category_id=${catId || ''}`, {method:'POST'});
       setItemModal(false); setNewItem({name:'', price:'', stock:'', category_id:''}); fetchData();
+    } catch(e: any) { Alert.alert('Error', e.message); }
+  };
+
+  const updateStock = async () => {
+    if(!editingItem || !newStock || parseInt(newStock) < 0) return Alert.alert('Error', 'Enter valid stock quantity');
+    try {
+      await fetch(`${API_URL}/api/inventory/add?shop_id=${shopId}&name=${encodeURIComponent(editingItem.name)}&price=${editingItem.price}&stock=${parseInt(newStock)}&category_id=${editingItem.category_id || ''}`, {method:'POST'});
+      Alert.alert('Success', 'Stock updated');
+      setEditStockModal(false);
+      setEditingItem(null);
+      setNewStock('');
+      fetchData();
     } catch(e: any) { Alert.alert('Error', e.message); }
   };
 
@@ -294,6 +311,20 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
 
   const renderOrderItem = ({item}: {item: Order}) => {
     const isNew = !item.is_viewed && item.status === 'pending' && role === 'shopkeeper';
+    
+    // Calculate total safely
+    const calculateTotal = () => {
+      if (!item.items || item.items.length === 0) return 0;
+      const total = item.items.reduce((sum, i) => {
+        const price = typeof i.price === 'number' ? i.price : parseFloat(i.price) || 0;
+        const qty = typeof i.quantity === 'number' ? i.quantity : parseInt(i.quantity) || 0;
+        return sum + (price * qty);
+      }, 0);
+      return total;
+    };
+    
+    const orderTotal = calculateTotal();
+    
     return (
       <TouchableOpacity style={[styles.orderCard, isNew && styles.orderCardNew]} onPress={() => viewOrderDetail(item.id)}>
         <View style={styles.orderHeader}>
@@ -308,7 +339,7 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
         </Text>
         <View style={styles.orderFooter}>
           <Text style={styles.orderDate}>{new Date(item.created_at).toLocaleString()}</Text>
-          {item.items && <Text style={styles.orderTotal}>₹{item.items.reduce((sum, i) => sum + (i.price * i.quantity), 0)}</Text>}
+          <Text style={styles.orderTotal}>₹{orderTotal}</Text>
         </View>
       </TouchableOpacity>
     );
@@ -323,7 +354,6 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
           <View style={styles.header}>
             <View style={styles.headerRow}>
               <Text style={styles.headerTitle}>Kottu</Text>
-              {/* ✅ Shows User Address here */}
               <Text style={styles.headerSub}>{user?.address || 'Your Location'}</Text>
             </View>
             <View style={styles.profileCircle}><Text style={styles.profileCircleText}>{user?.name?.charAt(0) || 'A'}</Text></View>
@@ -334,15 +364,13 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
               <View style={styles.profileField}><Text style={styles.label}>Name</Text><Text style={styles.value}>{user?.name}</Text></View>
               <View style={styles.profileField}><Text style={styles.label}>Phone</Text><Text style={styles.value}>{user?.phone}</Text></View>
               <View style={styles.profileField}><Text style={styles.label}>Address</Text><Text style={styles.value}>{user?.address || 'Not set'}</Text></View>
-              {/* ✅ Added Logout Button */}
               <TouchableOpacity style={styles.logoutBtn} onPress={onLogout}>
                 <Text style={{color:'#fff', fontWeight:'bold', fontSize:14}}>🚪 Logout</Text>
               </TouchableOpacity>
             </View>
           </ScrollView>
-          {/* ✅ Removed Order Button */}
           <View style={styles.bottomNav}>
-            <TouchableOpacity style={[styles.navBtn, styles.navBtnActive]}><Text style={styles.navIcon}>🏪</Text><Text style={[styles.navText, styles.navTextActive]}>Shops</Text></TouchableOpacity>
+            <TouchableOpacity style={[styles.navBtn, styles.navBtnActive]} onPress={()=>{setActiveTab('shops'); setSelectedShop(null);}}><Text style={styles.navIcon}>🏪</Text><Text style={[styles.navText, styles.navTextActive]}>Shops</Text></TouchableOpacity>
             <TouchableOpacity style={[styles.navBtn, styles.navBtnActive]}><Text style={styles.navIcon}>👤</Text><Text style={[styles.navText, styles.navTextActive]}>Profile</Text></TouchableOpacity>
           </View>
         </SafeAreaView>
@@ -355,7 +383,6 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
         <View style={styles.header}>
           <View style={styles.headerRow}>
             <Text style={styles.headerTitle}>Kottu</Text>
-            {/* ✅ Shows User Address here */}
             <Text style={styles.headerSub}>{user?.address || 'Your Location'}</Text>
           </View>
           <View style={styles.profileCircle}><Text style={styles.profileCircleText}>{user?.name?.charAt(0) || 'A'}</Text></View>
@@ -364,7 +391,6 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
         <FlatList data={shops} keyExtractor={i=>i.id.toString()} contentContainerStyle={styles.list}
           ListEmptyComponent={<Text style={styles.emptyText}>No shops registered yet.</Text>}
           renderItem={renderShopItem} />
-        {/* ✅ Removed Order Button */}
         <View style={styles.bottomNav}>
           <TouchableOpacity style={[styles.navBtn, styles.navBtnActive]}><Text style={styles.navIcon}>🏪</Text><Text style={[styles.navText, styles.navTextActive]}>Shops</Text></TouchableOpacity>
           <TouchableOpacity style={styles.navBtn} onPress={()=>setActiveTab('profile')}><Text style={styles.navIcon}>👤</Text><Text style={styles.navText}>Profile</Text></TouchableOpacity>
@@ -430,7 +456,6 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
             {role==='shopkeeper' && profile?.shop_name && (
               <View style={styles.profileField}><Text style={styles.label}>Shop Name</Text><Text style={styles.value}>{profile.shop_name}</Text></View>
             )}
-            {/* ✅ Logout Button for Shopkeeper Profile too */}
             <TouchableOpacity style={styles.logoutBtn} onPress={onLogout}>
               <Text style={{color:'#fff', fontWeight:'bold', fontSize:14}}>🚪 Logout</Text>
             </TouchableOpacity>
@@ -462,7 +487,19 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
                         <Text style={styles.itemName}>{item.name}</Text>
                         <Text style={styles.itemStock}>{item.stock} left</Text>
                       </View>
-                      <Text style={styles.itemPrice}>₹{item.price}</Text>
+                      <View style={styles.itemRight}>
+                        <Text style={styles.itemPrice}>₹{item.price}</Text>
+                        <TouchableOpacity 
+                          style={styles.editStockBtn} 
+                          onPress={()=>{
+                            setEditingItem(item);
+                            setNewStock(item.stock.toString());
+                            setEditStockModal(true);
+                          }}
+                        >
+                          <Text style={styles.editStockBtnText}>✏️</Text>
+                        </TouchableOpacity>
+                      </View>
                     </View>
                   ))}
                 </View>
@@ -512,9 +549,21 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
 
       {/* Bottom Navigation */}
       <View style={styles.bottomNav}>
-        <TouchableOpacity style={[styles.navBtn, activeTab==='inventory' && styles.navBtnActive]} onPress={()=>setActiveTab('inventory')}>
+        <TouchableOpacity 
+          style={[styles.navBtn, activeTab==='inventory' && styles.navBtnActive]} 
+          onPress={()=>{
+            if(role==='customer') {
+              setActiveTab('shops');
+              setSelectedShop(null);
+            } else {
+              setActiveTab('inventory');
+            }
+          }}
+        >
           <Text style={styles.navIcon}>📦</Text>
-          <Text style={[styles.navText, activeTab==='inventory' && styles.navTextActive]}>Inventory</Text>
+          <Text style={[styles.navText, activeTab==='inventory' && styles.navTextActive]}>
+            {role==='customer' ? 'Shops' : 'Inventory'}
+          </Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.navBtn, activeTab==='orders' && styles.navBtnActive]} onPress={()=>setActiveTab('orders')}>
           <Text style={styles.navIcon}>📜</Text>
@@ -559,6 +608,31 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
             <View style={styles.modalBtns}>
               <TouchableOpacity style={styles.cancelBtn} onPress={()=>setOrderModal(null)}><Text style={styles.btnTxt}>Cancel</Text></TouchableOpacity>
               <TouchableOpacity style={styles.confirmBtn} onPress={placeOrder}><Text style={[styles.btnTxt,{color:'#fff'}]}>Confirm Order →</Text></TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Edit Stock Modal */}
+      <Modal visible={editStockModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>✏️ Update Stock</Text>
+            <Text style={{marginBottom:12, color:'#666'}}>{editingItem?.name}</Text>
+            <TextInput 
+              style={styles.input} 
+              keyboardType="numeric" 
+              placeholder="New Stock Quantity" 
+              value={newStock} 
+              onChangeText={setNewStock}
+            />
+            <View style={styles.modalBtns}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={()=>{setEditStockModal(false); setEditingItem(null);}}>
+                <Text style={styles.btnTxt}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.confirmBtn} onPress={updateStock}>
+                <Text style={[styles.btnTxt,{color:'#fff'}]}>Update Stock</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -662,6 +736,8 @@ const styles = StyleSheet.create({
   orderBtn:{backgroundColor:'#E67E22', paddingHorizontal:12, paddingVertical:6, borderRadius:8, marginTop:4},
   orderBtnText:{color:'#fff', fontSize:12, fontWeight:'bold'},
   orderBtnDisabled:{backgroundColor:'#BCAAA4'},
+  editStockBtn:{backgroundColor:'#FFF3E0', width:36, height:36, borderRadius:18, justifyContent:'center', alignItems:'center', marginTop:4},
+  editStockBtnText:{fontSize:16},
   orderCard:{backgroundColor:'#fff', padding:16, borderRadius:16, marginBottom:12, elevation:2},
   orderCardNew:{borderLeftWidth:4, borderLeftColor:'#E67E22'},
   orderHeader:{flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:8},
@@ -727,6 +803,5 @@ const styles = StyleSheet.create({
   authBtn:{backgroundColor:'#E67E22', padding:16, borderRadius:12, alignItems:'center', marginTop:8},
   authBtnText:{color:'#fff', fontSize:16, fontWeight:'bold'},
   authSwitch:{textAlign:'center', marginTop:16, color:'#E67E22', fontWeight:'500'},
-  // ✅ Added Logout Button Style
   logoutBtn:{marginTop:20, padding:12, backgroundColor:'#D32F2F', borderRadius:12, alignItems:'center'}
 });
