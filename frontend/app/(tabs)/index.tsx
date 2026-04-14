@@ -296,7 +296,37 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
   };
 
   // Shops List (Customer - Initial Screen)
+    // Shops List (Customer - Initial Screen)
   if(role==='customer' && !selectedShop) {
+    // ✅ Show Profile when tab is clicked on shop list
+    if (activeTab === 'profile') {
+      return (
+        <SafeAreaView style={styles.container}>
+          <StatusBar barStyle="dark-content" />
+          <View style={styles.header}>
+            <TouchableOpacity onPress={()=>setActiveTab('inventory')} style={{flexDirection:'row', alignItems:'center'}}>
+              <Text style={{color:'#fff', fontSize:20, marginRight:8, fontWeight:'bold'}}>←</Text>
+              <Text style={styles.headerTitle}>🛒 KOTTU</Text>
+            </TouchableOpacity>
+            <View style={styles.headerRight}>
+              <TouchableOpacity onPress={()=>setActiveTab('inventory')}><Text style={styles.headerUser}>← Shops</Text></TouchableOpacity>
+              <TouchableOpacity onPress={onLogout}><Text style={styles.headerLogout}>🚪 Logout</Text></TouchableOpacity>
+            </View>
+          </View>
+          <ScrollView style={{flex:1, backgroundColor:'#F8F9FA'}} contentContainerStyle={{padding:12}}>
+            <View style={styles.profileCard}>
+              <Text style={styles.profileTitle}>👤 Profile</Text>
+              <View style={styles.profileField}><Text style={styles.label}>Name</Text><Text style={styles.value}>{user?.name}</Text></View>
+              <View style={styles.profileField}><Text style={styles.label}>Phone</Text><Text style={styles.value}>{user?.phone}</Text></View>
+              <View style={styles.profileField}><Text style={styles.label}>Address</Text><Text style={styles.value}>{user?.address || 'Not set'}</Text></View>
+              <Text style={{marginTop:12, fontSize:12, color:'#888', textAlign:'center'}}>Profile details cannot be edited after registration.</Text>
+            </View>
+          </ScrollView>
+        </SafeAreaView>
+      );
+    }
+
+    // Original Shop List
     return (
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="dark-content" />
