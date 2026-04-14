@@ -323,7 +323,8 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
           <View style={styles.header}>
             <View style={styles.headerRow}>
               <Text style={styles.headerTitle}>Kottu</Text>
-              <Text style={styles.headerSub}>Hyderabad, Telangana</Text>
+              {/* ✅ Shows User Address here */}
+              <Text style={styles.headerSub}>{user?.address || 'Your Location'}</Text>
             </View>
             <View style={styles.profileCircle}><Text style={styles.profileCircleText}>{user?.name?.charAt(0) || 'A'}</Text></View>
           </View>
@@ -333,11 +334,15 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
               <View style={styles.profileField}><Text style={styles.label}>Name</Text><Text style={styles.value}>{user?.name}</Text></View>
               <View style={styles.profileField}><Text style={styles.label}>Phone</Text><Text style={styles.value}>{user?.phone}</Text></View>
               <View style={styles.profileField}><Text style={styles.label}>Address</Text><Text style={styles.value}>{user?.address || 'Not set'}</Text></View>
+              {/* ✅ Added Logout Button */}
+              <TouchableOpacity style={styles.logoutBtn} onPress={onLogout}>
+                <Text style={{color:'#fff', fontWeight:'bold', fontSize:14}}>🚪 Logout</Text>
+              </TouchableOpacity>
             </View>
           </ScrollView>
+          {/* ✅ Removed Order Button */}
           <View style={styles.bottomNav}>
-            <TouchableOpacity style={styles.navBtn} onPress={()=>setActiveTab('shops')}><Text style={styles.navIcon}>🏪</Text><Text style={styles.navText}>Shops</Text></TouchableOpacity>
-            <TouchableOpacity style={styles.navBtn} onPress={()=>setActiveTab('orders')}><Text style={styles.navIcon}>📜</Text><Text style={styles.navText}>Orders</Text></TouchableOpacity>
+            <TouchableOpacity style={[styles.navBtn, styles.navBtnActive]}><Text style={styles.navIcon}>🏪</Text><Text style={[styles.navText, styles.navTextActive]}>Shops</Text></TouchableOpacity>
             <TouchableOpacity style={[styles.navBtn, styles.navBtnActive]}><Text style={styles.navIcon}>👤</Text><Text style={[styles.navText, styles.navTextActive]}>Profile</Text></TouchableOpacity>
           </View>
         </SafeAreaView>
@@ -350,7 +355,8 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
         <View style={styles.header}>
           <View style={styles.headerRow}>
             <Text style={styles.headerTitle}>Kottu</Text>
-            <Text style={styles.headerSub}>Hyderabad, Telangana</Text>
+            {/* ✅ Shows User Address here */}
+            <Text style={styles.headerSub}>{user?.address || 'Your Location'}</Text>
           </View>
           <View style={styles.profileCircle}><Text style={styles.profileCircleText}>{user?.name?.charAt(0) || 'A'}</Text></View>
         </View>
@@ -358,9 +364,9 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
         <FlatList data={shops} keyExtractor={i=>i.id.toString()} contentContainerStyle={styles.list}
           ListEmptyComponent={<Text style={styles.emptyText}>No shops registered yet.</Text>}
           renderItem={renderShopItem} />
+        {/* ✅ Removed Order Button */}
         <View style={styles.bottomNav}>
           <TouchableOpacity style={[styles.navBtn, styles.navBtnActive]}><Text style={styles.navIcon}>🏪</Text><Text style={[styles.navText, styles.navTextActive]}>Shops</Text></TouchableOpacity>
-          <TouchableOpacity style={styles.navBtn} onPress={()=>setActiveTab('orders')}><Text style={styles.navIcon}>📜</Text><Text style={styles.navText}>Orders</Text></TouchableOpacity>
           <TouchableOpacity style={styles.navBtn} onPress={()=>setActiveTab('profile')}><Text style={styles.navIcon}>👤</Text><Text style={styles.navText}>Profile</Text></TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -424,6 +430,10 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
             {role==='shopkeeper' && profile?.shop_name && (
               <View style={styles.profileField}><Text style={styles.label}>Shop Name</Text><Text style={styles.value}>{profile.shop_name}</Text></View>
             )}
+            {/* ✅ Logout Button for Shopkeeper Profile too */}
+            <TouchableOpacity style={styles.logoutBtn} onPress={onLogout}>
+              <Text style={{color:'#fff', fontWeight:'bold', fontSize:14}}>🚪 Logout</Text>
+            </TouchableOpacity>
             <Text style={{marginTop:12, fontSize:12, color:'#888', textAlign:'center'}}>Profile details cannot be edited after registration.</Text>
           </View>
         )}
@@ -716,5 +726,7 @@ const styles = StyleSheet.create({
   roleToggleTextActive:{color:'#fff'},
   authBtn:{backgroundColor:'#E67E22', padding:16, borderRadius:12, alignItems:'center', marginTop:8},
   authBtnText:{color:'#fff', fontSize:16, fontWeight:'bold'},
-  authSwitch:{textAlign:'center', marginTop:16, color:'#E67E22', fontWeight:'500'}
+  authSwitch:{textAlign:'center', marginTop:16, color:'#E67E22', fontWeight:'500'},
+  // ✅ Added Logout Button Style
+  logoutBtn:{marginTop:20, padding:12, backgroundColor:'#D32F2F', borderRadius:12, alignItems:'center'}
 });
