@@ -95,7 +95,7 @@ export default function App() {
     setFormData({ name: '', phone: '', password: '', role: 'customer', shop_name: '', address: '' });
   };
 
-  if(loading) return <View style={styles.center}><ActivityIndicator size="large" color="#2E7D32" /><Text style={{marginTop:10, color:'#666'}}>Connecting...</Text></View>;
+  if(loading) return <View style={styles.center}><ActivityIndicator size="large" color="#E67E22" /><Text style={{marginTop:10, color:'#666'}}>Connecting...</Text></View>;
   if(!user) return <AuthScreen isLogin={isLogin} setIsLogin={setIsLogin} formData={formData} setFormData={setFormData} handleAuth={handleAuth} authLoading={authLoading} />;
 
   return <MainApp user={user} selectedShop={selectedShop} setSelectedShop={setSelectedShop} onLogout={logout} />;
@@ -111,28 +111,48 @@ function AuthScreen({ isLogin, setIsLogin, formData, setFormData, handleAuth, au
     <SafeAreaView style={styles.authContainer}>
       <StatusBar barStyle="dark-content" />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{flex:1}}>
-        <View style={styles.authBox}>
-          <Text style={styles.authTitle}>🛒 KOTTU</Text>
-          <Text style={styles.authSub}>Multi-Shop Platform</Text>
-          <Text style={styles.authToggle}>{isLogin ? 'Login' : 'Create Account'}</Text>
-          {!isLogin && <TextInput style={styles.authInput} placeholder="Full Name" value={formData.name} onChangeText={v=>setFormData({...formData, name:v})} />}
-          <TextInput style={styles.authInput} placeholder="Phone Number" keyboardType="phone-pad" value={formData.phone} onChangeText={v=>setFormData({...formData, phone:v})} />
-          <TextInput style={styles.authInput} placeholder="Password (min 4)" secureTextEntry value={formData.password} onChangeText={v=>setFormData({...formData, password:v})} />
-          {!isLogin && (
-            <>
-              <View style={styles.roleBox}>
-                <TouchableOpacity style={[styles.roleBtn, formData.role==='customer' && styles.roleActive]} onPress={()=>setFormData({...formData, role:'customer'})}><Text style={styles.roleTxt}>🛍️ Customer</Text></TouchableOpacity>
-                <TouchableOpacity style={[styles.roleBtn, formData.role==='shopkeeper' && styles.roleActive]} onPress={()=>setFormData({...formData, role:'shopkeeper'})}><Text style={styles.roleTxt}>🏪 Shopkeeper</Text></TouchableOpacity>
-              </View>
-              {formData.role==='shopkeeper' && <TextInput style={styles.authInput} placeholder="Shop Name" value={formData.shop_name} onChangeText={v=>setFormData({...formData, shop_name:v})} />}
-              <TextInput style={styles.authInput} placeholder="Address" value={formData.address} onChangeText={v=>setFormData({...formData, address:v})} />
-            </>
-          )}
-          <TouchableOpacity style={styles.authBtn} onPress={handleAuth} disabled={authLoading}>
-            <Text style={styles.authBtnText}>{authLoading ? '...' : (isLogin ? 'Login' : 'Sign Up')}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={()=>setIsLogin(!isLogin)}><Text style={styles.authSwitch}>{isLogin ? "New? Sign Up" : "Have Account? Login"}</Text></TouchableOpacity>
-        </View>
+        <ScrollView contentContainerStyle={{flexGrow:1, justifyContent:'center', padding:24}}>
+          <View style={styles.authHeader}>
+            <View style={styles.logoCircle}>
+              <Text style={styles.logoIcon}>🛒</Text>
+            </View>
+            <Text style={styles.authTitle}>Kottu</Text>
+            <Text style={styles.authSubtitle}>Your Neighbourhood Kirana</Text>
+          </View>
+
+          <View style={styles.authCard}>
+            <Text style={styles.authWelcome}>Welcome back 👋</Text>
+            
+            <TextInput style={styles.authInput} placeholder="Phone Number" keyboardType="phone-pad" value={formData.phone} onChangeText={v=>setFormData({...formData, phone:v})} />
+            <TextInput style={styles.authInput} placeholder="Password" secureTextEntry value={formData.password} onChangeText={v=>setFormData({...formData, password:v})} />
+            
+            {!isLogin && (
+              <>
+                <TextInput style={styles.authInput} placeholder="Full Name" value={formData.name} onChangeText={v=>setFormData({...formData, name:v})} />
+                <View style={styles.roleToggle}>
+                  <TouchableOpacity style={[styles.roleToggleBtn, formData.role==='customer' && styles.roleToggleActive]} onPress={()=>setFormData({...formData, role:'customer'})}>
+                    <Text style={[styles.roleToggleText, formData.role==='customer' && styles.roleToggleTextActive]}>🛍️ Customer</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.roleToggleBtn, formData.role==='shopkeeper' && styles.roleToggleActive]} onPress={()=>setFormData({...formData, role:'shopkeeper'})}>
+                    <Text style={[styles.roleToggleText, formData.role==='shopkeeper' && styles.roleToggleTextActive]}>🏪 Shopkeeper</Text>
+                  </TouchableOpacity>
+                </View>
+                {formData.role==='shopkeeper' && <TextInput style={styles.authInput} placeholder="Shop Name" value={formData.shop_name} onChangeText={v=>setFormData({...formData, shop_name:v})} />}
+                <TextInput style={styles.authInput} placeholder="Address" value={formData.address} onChangeText={v=>setFormData({...formData, address:v})} />
+              </>
+            )}
+
+            <TouchableOpacity style={styles.authBtn} onPress={handleAuth} disabled={authLoading}>
+              <Text style={styles.authBtnText}>{authLoading ? '...' : (isLogin ? 'Login →' : 'Create Account')}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={()=>setIsLogin(!isLogin)}>
+              <Text style={styles.authSwitch}>
+                {isLogin ? "New here? Create Account" : "Have account? Login"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -150,7 +170,7 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
   const [customerOrders, setCustomerOrders] = useState<Order[]>([]);
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState(role==='shopkeeper' ? 'inventory' : 'inventory');
+  const [activeTab, setActiveTab] = useState(role==='shopkeeper' ? 'inventory' : 'shops');
   
   const [catModal, setCatModal] = useState(false);
   const [newCat, setNewCat] = useState('');
@@ -183,7 +203,6 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
         const ordRes = await fetch(`${API_URL}/api/orders?shop_id=${shopId}`).then(r=>r.json());
         setOrders(ordRes as Order[]);
       } else {
-        // CHANGE: Pass shop_id to filter orders by shop
         const custOrdRes = await fetch(`${API_URL}/api/customer/orders?customer_phone=${user?.phone}&shop_id=${shopId}`).then(r=>r.json());
         setCustomerOrders(custOrdRes as Order[]);
       }
@@ -259,136 +278,146 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
   }));
 
   const renderShopItem = ({item}: {item: Shop}) => (
-    <TouchableOpacity style={styles.card} onPress={()=>{setSelectedShop(item); setActiveTab('inventory');}}>
-      <View style={styles.cardContent}>
-        <Text style={styles.cardTitle}>{item.shop_name || item.name}</Text>
-        <Text style={styles.cardSub}>{item.address || 'No address provided'}</Text>
+    <TouchableOpacity style={styles.shopCard} onPress={()=>{setSelectedShop(item); setActiveTab('inventory');}}>
+      <View style={styles.shopIconCircle}>
+        <Text style={styles.shopIcon}>🏪</Text>
       </View>
-      <Text style={styles.badge}>Tap to View</Text>
+      <View style={styles.shopInfo}>
+        <Text style={styles.shopName}>{item.shop_name || item.name}</Text>
+        <Text style={styles.shopAddress}>{item.address || 'No address'}</Text>
+      </View>
+      <View style={styles.tapBadge}>
+        <Text style={styles.tapText}>Tap to View</Text>
+      </View>
     </TouchableOpacity>
   );
 
   const renderOrderItem = ({item}: {item: Order}) => {
     const isNew = !item.is_viewed && item.status === 'pending' && role === 'shopkeeper';
     return (
-      <TouchableOpacity 
-        style={[styles.orderRow, isNew && styles.newOrderRow]} 
-        onPress={() => viewOrderDetail(item.id)}
-      >
-        <View style={styles.orderInfo}>
-          <View style={styles.orderHeader}>
-            <Text style={styles.orderText}>
-              {role === 'shopkeeper' ? item.customer_name : (item.shop_name || 'Shop')}
-            </Text>
-            {isNew && <View style={styles.newBadge}><Text style={styles.newBadgeText}>NEW</Text></View>}
-          </View>
-          <Text style={styles.orderSub}>
-            {item.items ? `${item.items.map(i => `${i.item_name} x${i.quantity}`).join(', ')}` : 'Items'} • {new Date(item.created_at).toLocaleDateString()}
-          </Text>
-        </View>
-        <View style={styles.orderStatusContainer}>
+      <TouchableOpacity style={[styles.orderCard, isNew && styles.orderCardNew]} onPress={() => viewOrderDetail(item.id)}>
+        <View style={styles.orderHeader}>
+          <Text style={styles.orderCustomer}>{role === 'shopkeeper' ? item.customer_name : (item.shop_name || 'Shop')}</Text>
+          {isNew && <View style={styles.newBadge}><Text style={styles.newBadgeText}>NEW</Text></View>}
           <Text style={[styles.orderStatus, item.status === 'delivered' ? styles.statusDelivered : item.status === 'received' ? styles.statusReceived : styles.statusPending]}>
             {item.status === 'delivered' ? 'Delivered' : item.status === 'received' ? 'Received' : 'Pending'}
           </Text>
+        </View>
+        <Text style={styles.orderItems}>
+          {item.items ? `${item.items.map(i => `${i.item_name} x${i.quantity}`).join(', ')}` : 'Items'}
+        </Text>
+        <View style={styles.orderFooter}>
+          <Text style={styles.orderDate}>{new Date(item.created_at).toLocaleString()}</Text>
+          {item.items && <Text style={styles.orderTotal}>₹{item.items.reduce((sum, i) => sum + (i.price * i.quantity), 0)}</Text>}
         </View>
       </TouchableOpacity>
     );
   };
 
-  // Shops List (Customer - Initial Screen)
-    // Shops List (Customer - Initial Screen)
+  // Customer Shop List
   if(role==='customer' && !selectedShop) {
-    // ✅ Show Profile when tab is clicked on shop list
     if (activeTab === 'profile') {
       return (
         <SafeAreaView style={styles.container}>
           <StatusBar barStyle="dark-content" />
           <View style={styles.header}>
-            <TouchableOpacity onPress={()=>setActiveTab('inventory')} style={{flexDirection:'row', alignItems:'center'}}>
-              <Text style={{color:'#fff', fontSize:20, marginRight:8, fontWeight:'bold'}}>←</Text>
-              <Text style={styles.headerTitle}>🛒 KOTTU</Text>
-            </TouchableOpacity>
-            <View style={styles.headerRight}>
-              <TouchableOpacity onPress={()=>setActiveTab('inventory')}><Text style={styles.headerUser}>← Shops</Text></TouchableOpacity>
-              <TouchableOpacity onPress={onLogout}><Text style={styles.headerLogout}>🚪 Logout</Text></TouchableOpacity>
+            <View style={styles.headerRow}>
+              <Text style={styles.headerTitle}>Kottu</Text>
+              <Text style={styles.headerSub}>Hyderabad, Telangana</Text>
             </View>
+            <View style={styles.profileCircle}><Text style={styles.profileCircleText}>{user?.name?.charAt(0) || 'A'}</Text></View>
           </View>
-          <ScrollView style={{flex:1, backgroundColor:'#F8F9FA'}} contentContainerStyle={{padding:12}}>
+          <ScrollView style={{flex:1}} contentContainerStyle={{padding:16}}>
             <View style={styles.profileCard}>
-              <Text style={styles.profileTitle}>👤 Profile</Text>
+              <Text style={styles.profileCardTitle}>👤 Profile</Text>
               <View style={styles.profileField}><Text style={styles.label}>Name</Text><Text style={styles.value}>{user?.name}</Text></View>
               <View style={styles.profileField}><Text style={styles.label}>Phone</Text><Text style={styles.value}>{user?.phone}</Text></View>
               <View style={styles.profileField}><Text style={styles.label}>Address</Text><Text style={styles.value}>{user?.address || 'Not set'}</Text></View>
-              <Text style={{marginTop:12, fontSize:12, color:'#888', textAlign:'center'}}>Profile details cannot be edited after registration.</Text>
             </View>
           </ScrollView>
+          <View style={styles.bottomNav}>
+            <TouchableOpacity style={styles.navBtn} onPress={()=>setActiveTab('shops')}><Text style={styles.navIcon}>🏪</Text><Text style={styles.navText}>Shops</Text></TouchableOpacity>
+            <TouchableOpacity style={styles.navBtn} onPress={()=>setActiveTab('orders')}><Text style={styles.navIcon}>📜</Text><Text style={styles.navText}>Orders</Text></TouchableOpacity>
+            <TouchableOpacity style={[styles.navBtn, styles.navBtnActive]}><Text style={styles.navIcon}>👤</Text><Text style={[styles.navText, styles.navTextActive]}>Profile</Text></TouchableOpacity>
+          </View>
         </SafeAreaView>
       );
     }
 
-    // Original Shop List
     return (
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="dark-content" />
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>🛒 KOTTU</Text>
-          <View style={styles.headerRight}>
-            <TouchableOpacity onPress={()=>setActiveTab('profile')}><Text style={styles.headerUser}>👤 {user?.name}</Text></TouchableOpacity>
-            <TouchableOpacity onPress={onLogout}><Text style={styles.headerLogout}>🚪 Logout</Text></TouchableOpacity>
+          <View style={styles.headerRow}>
+            <Text style={styles.headerTitle}>Kottu</Text>
+            <Text style={styles.headerSub}>Hyderabad, Telangana</Text>
           </View>
+          <View style={styles.profileCircle}><Text style={styles.profileCircleText}>{user?.name?.charAt(0) || 'A'}</Text></View>
         </View>
+        <Text style={styles.sectionHeader}>SHOPS NEAR YOU</Text>
         <FlatList data={shops} keyExtractor={i=>i.id.toString()} contentContainerStyle={styles.list}
           ListEmptyComponent={<Text style={styles.emptyText}>No shops registered yet.</Text>}
           renderItem={renderShopItem} />
+        <View style={styles.bottomNav}>
+          <TouchableOpacity style={[styles.navBtn, styles.navBtnActive]}><Text style={styles.navIcon}>🏪</Text><Text style={[styles.navText, styles.navTextActive]}>Shops</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.navBtn} onPress={()=>setActiveTab('orders')}><Text style={styles.navIcon}>📜</Text><Text style={styles.navText}>Orders</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.navBtn} onPress={()=>setActiveTab('profile')}><Text style={styles.navIcon}>👤</Text><Text style={styles.navText}>Profile</Text></TouchableOpacity>
+        </View>
       </SafeAreaView>
     );
   }
 
-  if(loading) return <View style={styles.center}><ActivityIndicator size="large" color="#2E7D32" /><Text style={{marginTop:10}}>Loading...</Text></View>;
+  if(loading) return <View style={styles.center}><ActivityIndicator size="large" color="#E67E22" /><Text style={{marginTop:10}}>Loading...</Text></View>;
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
       
-      {/* HEADER WITH BACK BUTTON FOR CUSTOMER */}
+      {/* HEADER */}
       <View style={styles.header}>
-        {role==='customer' && selectedShop ? (
-          <TouchableOpacity 
-            onPress={()=>{setSelectedShop(null); setActiveTab('inventory');}} 
-            style={{flexDirection:'row', alignItems:'center'}}
-          >
-            <Text style={{color:'#fff', fontSize:20, marginRight:8, fontWeight:'bold'}}>←</Text>
-            <Text style={styles.headerTitle}>🛒 KOTTU</Text>
-          </TouchableOpacity>
-        ) : (
-          <Text style={styles.headerTitle}>🛒 KOTTU</Text>
-        )}
-        <View style={styles.headerRight}>
-          <TouchableOpacity onPress={()=>setActiveTab('profile')}>
-            <Text style={styles.headerUser}>👤 {user?.name}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={onLogout}>
-            <Text style={styles.headerLogout}>🚪 Logout</Text>
-          </TouchableOpacity>
+        <View style={styles.headerRow}>
+          <View style={{flexDirection:'row', alignItems:'center'}}>
+            {role==='customer' && selectedShop && (
+              <TouchableOpacity onPress={()=>{setSelectedShop(null); setActiveTab('shops');}} style={{marginRight:8}}>
+                <Text style={{color:'#fff', fontSize:18}}>←</Text>
+              </TouchableOpacity>
+            )}
+            <View>
+              <Text style={styles.headerTitle}>Kottu</Text>
+              <Text style={styles.headerSub}>{role==='shopkeeper' ? user?.shop_name : selectedShop?.shop_name || 'Your Neighbourhood Kirana'}</Text>
+            </View>
+          </View>
+          <View style={styles.profileCircle}><Text style={styles.profileCircleText}>{user?.name?.charAt(0) || 'A'}</Text></View>
         </View>
       </View>
 
+      {/* TABS */}
       <View style={styles.tabs}>
-        {role==='shopkeeper' ? ['inventory','orders'].map(tab=>(
-          <TouchableOpacity key={tab} style={[styles.tab, activeTab===tab && styles.activeTab]} onPress={()=>setActiveTab(tab)}>
-            <Text style={[styles.tabText, activeTab===tab && styles.activeTabText]}>{tab==='inventory'?'📦 Inventory':' Orders'}</Text>
-          </TouchableOpacity>
-        )) : ['inventory','orders'].map(tab=>(
-          <TouchableOpacity key={tab} style={[styles.tab, activeTab===tab && styles.activeTab]} onPress={()=>setActiveTab(tab)}>
-            <Text style={[styles.tabText, activeTab===tab && styles.activeTabText]}>{tab==='inventory'?'📦 Inventory':'📜 My Orders'}</Text>
-          </TouchableOpacity>
-        ))}
+        {role==='shopkeeper' ? (
+          <>
+            <TouchableOpacity style={[styles.tab, activeTab==='inventory' && styles.activeTab]} onPress={()=>setActiveTab('inventory')}>
+              <Text style={[styles.tabText, activeTab==='inventory' && styles.activeTabText]}>Inventory</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.tab, activeTab==='orders' && styles.activeTab]} onPress={()=>setActiveTab('orders')}>
+              <Text style={[styles.tabText, activeTab==='orders' && styles.activeTabText]}>Orders</Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <>
+            <TouchableOpacity style={[styles.tab, activeTab==='inventory' && styles.activeTab]} onPress={()=>setActiveTab('inventory')}>
+              <Text style={[styles.tabText, activeTab==='inventory' && styles.activeTabText]}>Inventory</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.tab, activeTab==='orders' && styles.activeTab]} onPress={()=>setActiveTab('orders')}>
+              <Text style={[styles.tabText, activeTab==='orders' && styles.activeTabText]}>My Orders</Text>
+            </TouchableOpacity>
+          </>
+        )}
       </View>
 
-      <ScrollView style={{flex:1, backgroundColor:'#F8F9FA'}} contentContainerStyle={{padding:12, paddingBottom:80}}>
+      <ScrollView style={{flex:1}} contentContainerStyle={{padding:12, paddingBottom:80}}>
         {activeTab==='profile' && (
           <View style={styles.profileCard}>
-            <Text style={styles.profileTitle}>👤 Profile</Text>
+            <Text style={styles.profileCardTitle}>👤 Profile</Text>
             <View style={styles.profileField}><Text style={styles.label}>Name</Text><Text style={styles.value}>{profile?.name || user?.name}</Text></View>
             <View style={styles.profileField}><Text style={styles.label}>Phone</Text><Text style={styles.value}>{profile?.phone || user?.phone}</Text></View>
             <View style={styles.profileField}><Text style={styles.label}>Address</Text><Text style={styles.value}>{profile?.address || user?.address || 'Not set'}</Text></View>
@@ -401,14 +430,16 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
 
         {activeTab==='inventory' && role==='shopkeeper' && (
           <View>
-            <TouchableOpacity style={styles.addBtn} onPress={()=>setCatModal(true)}><Text style={{color:'#fff', fontWeight:'bold'}}>➕ Add Category</Text></TouchableOpacity>
+            <TouchableOpacity style={styles.addBtn} onPress={()=>setCatModal(true)}>
+              <Text style={styles.addBtnText}>➕ Add Category</Text>
+            </TouchableOpacity>
             {groupedProducts.length === 0 ? (
               <Text style={styles.emptyText}>No categories or items yet.</Text>
             ) : (
               groupedProducts.map((group, idx) => (
-                <View key={idx}>
-                  <View style={styles.catHeader}>
-                    <Text style={styles.catTitle}>{group.category}</Text>
+                <View key={idx} style={styles.categorySection}>
+                  <View style={styles.categoryHeader}>
+                    <Text style={styles.categoryTitle}>{group.category}</Text>
                     <TouchableOpacity onPress={()=>{
                       setItemModal(true);
                       const cat = categories.find(c => c.name === group.category);
@@ -417,8 +448,11 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
                   </View>
                   {group.items.map((item) => (
                     <View key={item.id} style={styles.itemRow}>
-                      <Text style={styles.itemName}>{item.name}</Text>
-                      <Text style={styles.itemPrice}>₹{item.price} • {item.stock} left</Text>
+                      <View style={styles.itemInfo}>
+                        <Text style={styles.itemName}>{item.name}</Text>
+                        <Text style={styles.itemStock}>{item.stock} left</Text>
+                      </View>
+                      <Text style={styles.itemPrice}>₹{item.price}</Text>
                     </View>
                   ))}
                 </View>
@@ -433,14 +467,20 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
               <Text style={styles.emptyText}>This shop hasn't added categories yet.</Text>
             ) : (
               groupedProducts.map((group, idx) => (
-                <View key={idx}>
-                  <Text style={styles.sectionTitle}>{group.category}</Text>
+                <View key={idx} style={styles.categorySection}>
+                  <Text style={styles.categoryTitle}>{group.category}</Text>
                   {group.items.map((item) => (
                     <TouchableOpacity key={item.id} style={styles.itemRow} onPress={()=> item.stock>0 ? setOrderModal(item) : null}>
-                      <View style={styles.itemInfo}><Text style={styles.itemName}>{item.name}</Text><Text style={styles.itemPrice}>₹{item.price}</Text></View>
-                      <Text style={[styles.stockBadge, item.stock>5?styles.stockOk:item.stock>0?styles.stockLow:styles.stockOut]}>
-                        {item.stock>0 ? `${item.stock} Left` : '❌ Out'}
-                      </Text>
+                      <View style={styles.itemInfo}>
+                        <Text style={styles.itemName}>{item.name}</Text>
+                        <Text style={styles.itemStock}>{item.stock} left</Text>
+                      </View>
+                      <View style={styles.itemRight}>
+                        <Text style={styles.itemPrice}>₹{item.price}</Text>
+                        <TouchableOpacity style={[styles.orderBtn, item.stock===0 && styles.orderBtnDisabled]} onPress={(e)=>{e.stopPropagation(); item.stock>0 && setOrderModal(item);}}>
+                          <Text style={styles.orderBtnText}>{item.stock>0 ? 'Order' : 'Out'}</Text>
+                        </TouchableOpacity>
+                      </View>
                     </TouchableOpacity>
                   ))}
                 </View>
@@ -450,23 +490,37 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
         )}
 
         {activeTab==='orders' && (
-          <View>
-            <FlatList 
-              data={role==='shopkeeper' ? orders : customerOrders} 
-              keyExtractor={i=>i.id.toString()} 
-              scrollEnabled={false}
-              ListEmptyComponent={<Text style={styles.emptyText}>No orders yet.</Text>}
-              renderItem={renderOrderItem} 
-            />
-          </View>
+          <FlatList 
+            data={role==='shopkeeper' ? orders : customerOrders} 
+            keyExtractor={i=>i.id.toString()} 
+            scrollEnabled={false}
+            ListEmptyComponent={<Text style={styles.emptyText}>No orders yet.</Text>}
+            renderItem={renderOrderItem} 
+          />
         )}
       </ScrollView>
+
+      {/* Bottom Navigation */}
+      <View style={styles.bottomNav}>
+        <TouchableOpacity style={[styles.navBtn, activeTab==='inventory' && styles.navBtnActive]} onPress={()=>setActiveTab('inventory')}>
+          <Text style={styles.navIcon}>📦</Text>
+          <Text style={[styles.navText, activeTab==='inventory' && styles.navTextActive]}>Inventory</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.navBtn, activeTab==='orders' && styles.navBtnActive]} onPress={()=>setActiveTab('orders')}>
+          <Text style={styles.navIcon}>📜</Text>
+          <Text style={[styles.navText, activeTab==='orders' && styles.navTextActive]}>Orders</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.navBtn, activeTab==='profile' && styles.navBtnActive]} onPress={()=>setActiveTab('profile')}>
+          <Text style={styles.navIcon}>👤</Text>
+          <Text style={[styles.navText, activeTab==='profile' && styles.navTextActive]}>Profile</Text>
+        </TouchableOpacity>
+      </View>
 
       {/* ==================== MODALS ==================== */}
       <Modal visible={catModal} transparent animationType="slide">
         <View style={styles.modalOverlay}><View style={styles.modalContent}><Text style={styles.modalTitle}>➕ Add Category</Text>
           <TextInput style={styles.input} placeholder="Category Name (e.g., Vegetables)" value={newCat} onChangeText={setNewCat}/>
-          <View style={styles.modalBtns}><TouchableOpacity style={styles.cancel} onPress={()=>setCatModal(false)}><Text style={styles.btnTxt}>Cancel</Text></TouchableOpacity><TouchableOpacity style={styles.confirm} onPress={addCategory}><Text style={[styles.btnTxt,{color:'#fff'}]}>Add</Text></TouchableOpacity></View>
+          <View style={styles.modalBtns}><TouchableOpacity style={styles.cancelBtn} onPress={()=>setCatModal(false)}><Text style={styles.btnTxt}>Cancel</Text></TouchableOpacity><TouchableOpacity style={styles.confirmBtn} onPress={addCategory}><Text style={[styles.btnTxt,{color:'#fff'}]}>Add</Text></TouchableOpacity></View>
         </View></View>
       </Modal>
 
@@ -475,17 +529,29 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
           <TextInput style={styles.input} placeholder="Item Name" value={newItem.name} onChangeText={v=>setNewItem({...newItem, name:v})}/>
           <TextInput style={styles.input} keyboardType="numeric" placeholder="Price (₹)" value={newItem.price} onChangeText={v=>setNewItem({...newItem, price:v})}/>
           <TextInput style={styles.input} keyboardType="numeric" placeholder="Stock" value={newItem.stock} onChangeText={v=>setNewItem({...newItem, stock:v})}/>
-          <View style={styles.modalBtns}><TouchableOpacity style={styles.cancel} onPress={()=>setItemModal(false)}><Text style={styles.btnTxt}>Cancel</Text></TouchableOpacity><TouchableOpacity style={styles.confirm} onPress={addItem}><Text style={[styles.btnTxt,{color:'#fff'}]}>Add</Text></TouchableOpacity></View>
+          <View style={styles.modalBtns}><TouchableOpacity style={styles.cancelBtn} onPress={()=>setItemModal(false)}><Text style={styles.btnTxt}>Cancel</Text></TouchableOpacity><TouchableOpacity style={styles.confirmBtn} onPress={addItem}><Text style={[styles.btnTxt,{color:'#fff'}]}>Add</Text></TouchableOpacity></View>
         </View></View>
       </Modal>
 
       <Modal visible={!!orderModal} transparent animationType="slide">
-        <View style={styles.modalOverlay}><View style={styles.modalContent}><Text style={styles.modalTitle}>Place Order</Text>
-          <Text style={{marginBottom:10}}>{orderModal?.name} - ₹{orderModal?.price}</Text>
-          <TextInput style={styles.input} placeholder="Your Name" value={custName} onChangeText={setCustName}/>
-          <TextInput style={styles.input} keyboardType="numeric" placeholder="Qty" value={qty} onChangeText={setQty}/>
-          <View style={styles.modalBtns}><TouchableOpacity style={styles.cancel} onPress={()=>setOrderModal(null)}><Text style={styles.btnTxt}>Cancel</Text></TouchableOpacity><TouchableOpacity style={styles.confirm} onPress={placeOrder}><Text style={[styles.btnTxt,{color:'#fff'}]}>Order</Text></TouchableOpacity></View>
-        </View></View>
+        <View style={styles.modalOverlay}>
+          <View style={styles.orderModal}>
+            <Text style={styles.modalTitle}>Place Order 🛒</Text>
+            <Text style={{marginBottom:12, color:'#666'}}>{orderModal?.name} — ₹{orderModal?.price} each</Text>
+            <TextInput style={styles.input} placeholder="Your Name" value={custName} onChangeText={setCustName}/>
+            <TextInput style={styles.input} keyboardType="numeric" placeholder="Quantity (e.g. 2)" value={qty} onChangeText={setQty}/>
+            {orderModal && qty && (
+              <View style={styles.totalRow}>
+                <Text style={styles.totalLabel}>Total Amount</Text>
+                <Text style={styles.totalValue}>₹{orderModal.price * parseInt(qty || '0')}</Text>
+              </View>
+            )}
+            <View style={styles.modalBtns}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={()=>setOrderModal(null)}><Text style={styles.btnTxt}>Cancel</Text></TouchableOpacity>
+              <TouchableOpacity style={styles.confirmBtn} onPress={placeOrder}><Text style={[styles.btnTxt,{color:'#fff'}]}>Confirm Order →</Text></TouchableOpacity>
+            </View>
+          </View>
+        </View>
       </Modal>
 
       {/* Order Detail Modal */}
@@ -499,18 +565,14 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
                 <Text style={styles.detailTitle}>👤 Customer</Text>
                 <Text style={styles.detailText}>Name: {selectedOrderDetail?.order?.customer_name}</Text>
                 <Text style={styles.detailText}>Phone: {selectedOrderDetail?.order?.customer_phone}</Text>
-                {selectedOrderDetail?.order?.customer_address ? (
-                  <Text style={styles.detailText}>Address: {selectedOrderDetail.order.customer_address}</Text>
-                ) : null}
+                {selectedOrderDetail?.order?.customer_address && <Text style={styles.detailText}>Address: {selectedOrderDetail.order.customer_address}</Text>}
               </View>
             ) : (
               <View style={styles.detailSection}>
                 <Text style={styles.detailTitle}>🏪 Shop</Text>
                 <Text style={styles.detailText}>Name: {selectedOrderDetail?.order?.shop_name}</Text>
                 <Text style={styles.detailText}>Phone: {selectedOrderDetail?.order?.shop_phone}</Text>
-                {selectedOrderDetail?.order?.shop_address ? (
-                  <Text style={styles.detailText}>Address: {selectedOrderDetail.order.shop_address}</Text>
-                ) : null}
+                {selectedOrderDetail?.order?.shop_address && <Text style={styles.detailText}>Address: {selectedOrderDetail.order.shop_address}</Text>}
               </View>
             )}
             
@@ -527,22 +589,22 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
             
             {role === 'shopkeeper' && (
               <View style={styles.modalBtns}>
-                <TouchableOpacity style={styles.cancel} onPress={()=>setShowOrderDetail(false)}>
+                <TouchableOpacity style={styles.cancelBtn} onPress={()=>setShowOrderDetail(false)}>
                   <Text style={styles.btnTxt}>Close</Text>
                 </TouchableOpacity>
                 {selectedOrderDetail?.order?.status === 'pending' ? (
-                  <TouchableOpacity style={styles.confirm} onPress={()=>updateOrderStatus(selectedOrderDetail.order.id, 'delivered')}>
+                  <TouchableOpacity style={styles.confirmBtn} onPress={()=>updateOrderStatus(selectedOrderDetail.order.id, 'delivered')}>
                     <Text style={[styles.btnTxt,{color:'#fff'}]}>Mark Delivered ✓</Text>
                   </TouchableOpacity>
                 ) : (
-                  <TouchableOpacity style={styles.confirm} onPress={()=>updateOrderStatus(selectedOrderDetail.order.id, 'pending')}>
+                  <TouchableOpacity style={styles.confirmBtn} onPress={()=>updateOrderStatus(selectedOrderDetail.order.id, 'pending')}>
                     <Text style={[styles.btnTxt,{color:'#fff'}]}>Mark Pending</Text>
                   </TouchableOpacity>
                 )}
               </View>
             )}
             {role === 'customer' && (
-              <TouchableOpacity style={styles.confirm} onPress={()=>setShowOrderDetail(false)}>
+              <TouchableOpacity style={styles.confirmBtn} onPress={()=>setShowOrderDetail(false)}>
                 <Text style={[styles.btnTxt,{color:'#fff'}]}>Close</Text>
               </TouchableOpacity>
             )}
@@ -555,69 +617,104 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
 
 // ==================== STYLES ====================
 const styles = StyleSheet.create({
-  container:{flex:1, backgroundColor:'#F8F9FA'}, 
-  header:{padding:16, backgroundColor:'#2E7D32', borderBottomLeftRadius:16, borderBottomRightRadius:16},
-  headerTitle:{fontSize:22, fontWeight:'bold', color:'#fff', marginBottom:4},
-  headerRight:{flexDirection:'row', justifyContent:'space-between', alignItems:'center'},
-  headerUser:{color:'#E8F5E9', fontSize:14, fontWeight:'600'},
-  headerLogout:{color:'#FFCDD2', fontSize:14, fontWeight:'600'},
-  tabs:{flexDirection:'row', backgroundColor:'#fff', padding:8, borderBottomWidth:1, borderBottomColor:'#EAECEF'},
-  tab:{flex:1, padding:10, alignItems:'center', borderRadius:8, marginHorizontal:2}, 
-  activeTab:{backgroundColor:'#E8F5E9'}, tabText:{fontSize:13, color:'#666'}, activeTabText:{color:'#2E7D32', fontWeight:'600'},
-  list:{padding:12, paddingBottom:80},
-  card:{backgroundColor:'#fff', padding:16, borderRadius:12, marginBottom:12, flexDirection:'row', justifyContent:'space-between', alignItems:'center', elevation:2},
-  cardContent:{flex:1}, cardTitle:{fontSize:16, fontWeight:'600', color:'#111'}, cardSub:{fontSize:13, color:'#666', marginTop:2},
-  badge:{backgroundColor:'#E8F5E9', color:'#2E7D32', paddingHorizontal:10, paddingVertical:4, borderRadius:12, fontSize:12, fontWeight:'600'},
-  section:{marginBottom:20}, sectionTitle:{fontSize:17, fontWeight:'600', color:'#333', marginBottom:10, marginTop:4},
-  itemRow:{backgroundColor:'#fff', padding:14, borderRadius:10, marginBottom:8, flexDirection:'row', justifyContent:'space-between', alignItems:'center', elevation:1},
-  itemInfo:{flex:1}, itemName:{fontSize:15, fontWeight:'500', color:'#333'}, itemPrice:{fontSize:14, color:'#2E7D32', fontWeight:'600', marginTop:2},
-  stockBadge:{paddingHorizontal:8, paddingVertical:3, borderRadius:8, fontSize:11, fontWeight:'600'}, stockOk:{backgroundColor:'#E8F5E9', color:'#2E7D32'}, stockLow:{backgroundColor:'#FFF3E0', color:'#E65100'}, stockOut:{backgroundColor:'#FFEBEE', color:'#C62828'},
-  orderRow:{backgroundColor:'#fff', padding:14, borderRadius:10, marginBottom:8, flexDirection:'row', justifyContent:'space-between', alignItems:'center', elevation:1},
-  newOrderRow:{borderLeftWidth:4, borderLeftColor:'#FF6B6B', backgroundColor:'#FFF5F5'},
-  orderInfo:{flex:1}, 
-  orderHeader:{flexDirection:'row', alignItems:'center', marginBottom:4},
-  orderText:{fontSize:14, fontWeight:'600', color:'#333'},
-  orderSub:{fontSize:12, color:'#666'},
-  orderStatusContainer:{alignItems:'flex-end'},
-  orderStatus:{fontSize:12, paddingHorizontal:8, paddingVertical:3, borderRadius:8, fontWeight:'600'},
+  container:{flex:1, backgroundColor:'#FDF6E3'},
+  header:{backgroundColor:'#5D4037', padding:16, paddingTop:40, borderBottomLeftRadius:16, borderBottomRightRadius:16},
+  headerRow:{flexDirection:'row', justifyContent:'space-between', alignItems:'center'},
+  headerTitle:{fontSize:24, fontWeight:'bold', color:'#fff'},
+  headerSub:{fontSize:13, color:'#D7CCC8', marginTop:2},
+  profileCircle:{width:36, height:36, borderRadius:18, backgroundColor:'#E67E22', justifyContent:'center', alignItems:'center'},
+  profileCircleText:{color:'#fff', fontSize:16, fontWeight:'bold'},
+  sectionHeader:{fontSize:12, fontWeight:'bold', color:'#8D6E63', letterSpacing:1, padding:16, paddingBottom:8},
+  tabs:{flexDirection:'row', backgroundColor:'#fff', padding:6, margin:12, borderRadius:12, elevation:2},
+  tab:{flex:1, padding:10, alignItems:'center', borderRadius:10},
+  activeTab:{backgroundColor:'#E67E22'},
+  tabText:{fontSize:13, color:'#8D6E63', fontWeight:'600'},
+  activeTabText:{color:'#fff'},
+  list:{padding:12, paddingBottom:20},
+  shopCard:{backgroundColor:'#fff', padding:16, borderRadius:16, marginBottom:12, flexDirection:'row', alignItems:'center', elevation:2, shadowColor:'#000', shadowOpacity:0.05, shadowRadius:4},
+  shopIconCircle:{width:48, height:48, borderRadius:24, backgroundColor:'#FFF3E0', justifyContent:'center', alignItems:'center', marginRight:12},
+  shopIcon:{fontSize:24},
+  shopInfo:{flex:1},
+  shopName:{fontSize:16, fontWeight:'bold', color:'#3E2723'},
+  shopAddress:{fontSize:13, color:'#8D6E63', marginTop:2},
+  tapBadge:{backgroundColor:'#FFF3E0', paddingHorizontal:10, paddingVertical:4, borderRadius:12},
+  tapText:{fontSize:11, color:'#E65100', fontWeight:'600'},
+  categorySection:{marginBottom:16},
+  categoryTitle:{fontSize:14, fontWeight:'bold', color:'#5D4037', marginBottom:8, marginTop:8},
+  categoryHeader:{flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:8},
+  addItemLink:{color:'#E67E22', fontSize:13, fontWeight:'600'},
+  itemRow:{backgroundColor:'#fff', padding:14, borderRadius:12, marginBottom:8, flexDirection:'row', justifyContent:'space-between', alignItems:'center', elevation:1},
+  itemInfo:{flex:1},
+  itemName:{fontSize:15, fontWeight:'600', color:'#3E2723'},
+  itemStock:{fontSize:12, color:'#8D6E63', marginTop:2},
+  itemPrice:{fontSize:15, fontWeight:'bold', color:'#E67E22'},
+  itemRight:{alignItems:'flex-end'},
+  orderBtn:{backgroundColor:'#E67E22', paddingHorizontal:12, paddingVertical:6, borderRadius:8, marginTop:4},
+  orderBtnText:{color:'#fff', fontSize:12, fontWeight:'bold'},
+  orderBtnDisabled:{backgroundColor:'#BCAAA4'},
+  orderCard:{backgroundColor:'#fff', padding:16, borderRadius:16, marginBottom:12, elevation:2},
+  orderCardNew:{borderLeftWidth:4, borderLeftColor:'#E67E22'},
+  orderHeader:{flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:8},
+  orderCustomer:{fontSize:16, fontWeight:'bold', color:'#3E2723'},
+  newBadge:{backgroundColor:'#FF5252', paddingHorizontal:8, paddingVertical:2, borderRadius:8},
+  newBadgeText:{color:'#fff', fontSize:10, fontWeight:'bold'},
+  orderStatus:{fontSize:12, fontWeight:'600', paddingHorizontal:8, paddingVertical:3, borderRadius:8},
   statusPending:{backgroundColor:'#FFF3E0', color:'#E65100'},
   statusDelivered:{backgroundColor:'#E8F5E9', color:'#2E7D32'},
   statusReceived:{backgroundColor:'#E3F2FD', color:'#1565C0'},
-  newBadge:{backgroundColor:'#FF6B6B', paddingHorizontal:6, paddingVertical:2, borderRadius:4, marginLeft:8},
-  newBadgeText:{color:'#fff', fontSize:10, fontWeight:'bold'},
-  profileCard:{backgroundColor:'#fff', padding:16, borderRadius:12, elevation:2}, 
-  profileTitle:{fontSize:18, fontWeight:'bold', color:'#333', marginBottom:12},
-  profileField:{marginBottom:12}, label:{fontSize:12, color:'#666', marginBottom:2}, value:{fontSize:15, color:'#333', fontWeight:'500'},
-  editBtn:{marginTop:12, padding:12, backgroundColor:'#2E7D32', borderRadius:8, alignItems:'center'},
-  addBtn:{margin:12, padding:12, backgroundColor:'#4A90E2', borderRadius:10, alignItems:'center'},
-  catHeader:{flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:8}, catTitle:{fontSize:16, fontWeight:'600', color:'#333'}, addItemLink:{color:'#4A90E2', fontSize:13, fontWeight:'600'},
-  emptyText:{textAlign:'center', color:'#888', marginTop:20, fontSize:14},
-  detailSection:{marginBottom:16, paddingBottom:16, borderBottomWidth:1, borderBottomColor:'#EAECEF'},
-  detailTitle:{fontSize:14, fontWeight:'bold', color:'#333', marginBottom:8},
-  detailText:{fontSize:13, color:'#666', marginBottom:4},
+  orderItems:{fontSize:13, color:'#5D4037', marginBottom:8},
+  orderFooter:{flexDirection:'row', justifyContent:'space-between', alignItems:'center'},
+  orderDate:{fontSize:11, color:'#8D6E63'},
+  orderTotal:{fontSize:16, fontWeight:'bold', color:'#E67E22'},
+  profileCard:{backgroundColor:'#fff', padding:16, borderRadius:16, elevation:2, marginBottom:12},
+  profileCardTitle:{fontSize:18, fontWeight:'bold', color:'#3E2723', marginBottom:12},
+  profileField:{marginBottom:12},
+  label:{fontSize:12, color:'#8D6E63', marginBottom:2},
+  value:{fontSize:15, color:'#3E2723', fontWeight:'500'},
+  addBtn:{backgroundColor:'#E67E22', padding:14, borderRadius:12, alignItems:'center', marginBottom:12},
+  addBtnText:{color:'#fff', fontWeight:'bold', fontSize:14},
+  emptyText:{textAlign:'center', color:'#8D6E63', marginTop:20, fontSize:14},
+  bottomNav:{flexDirection:'row', backgroundColor:'#fff', paddingVertical:8, borderTopWidth:1, borderTopColor:'#EEE'},
+  navBtn:{flex:1, alignItems:'center', paddingVertical:4},
+  navBtnActive:{},
+  navIcon:{fontSize:20, marginBottom:2},
+  navText:{fontSize:11, color:'#8D6E63'},
+  navTextActive:{color:'#E67E22', fontWeight:'bold'},
+  modalOverlay:{flex:1, backgroundColor:'rgba(0,0,0,0.5)', justifyContent:'flex-end'},
+  modalContent:{backgroundColor:'#fff', borderTopLeftRadius:20, borderTopRightRadius:20, padding:20, maxHeight:'70%'},
+  orderModal:{backgroundColor:'#fff', borderTopLeftRadius:20, borderTopRightRadius:20, padding:20, maxHeight:'60%'},
+  modalTitle:{fontSize:18, fontWeight:'bold', color:'#3E2723', marginBottom:12},
+  input:{borderWidth:1, borderColor:'#E0E0E0', borderRadius:12, padding:12, fontSize:15, marginBottom:12, backgroundColor:'#FAFAFA'},
+  modalBtns:{flexDirection:'row', justifyContent:'space-between', gap:12, marginTop:8},
+  cancelBtn:{flex:1, padding:12, backgroundColor:'#F5F5F5', borderRadius:12, alignItems:'center'},
+  confirmBtn:{flex:1, padding:12, backgroundColor:'#E67E22', borderRadius:12, alignItems:'center'},
+  btnTxt:{fontSize:14, fontWeight:'600'},
+  totalRow:{flexDirection:'row', justifyContent:'space-between', backgroundColor:'#FFF3E0', padding:12, borderRadius:8, marginBottom:12},
+  totalLabel:{fontSize:14, color:'#5D4037'},
+  totalValue:{fontSize:16, fontWeight:'bold', color:'#E67E22'},
+  detailSection:{marginBottom:16, paddingBottom:16, borderBottomWidth:1, borderBottomColor:'#EEE'},
+  detailTitle:{fontSize:14, fontWeight:'bold', color:'#3E2723', marginBottom:8},
+  detailText:{fontSize:13, color:'#5D4037', marginBottom:4},
   itemDetailRow:{flexDirection:'row', justifyContent:'space-between', paddingVertical:6, borderBottomWidth:1, borderBottomColor:'#F5F5F5'},
-  itemDetailName:{fontSize:13, fontWeight:'500', color:'#333', flex:1},
-  itemDetailQty:{fontSize:13, color:'#666', marginHorizontal:12},
-  itemDetailPrice:{fontSize:13, fontWeight:'600', color:'#2E7D32'},
-  modalOverlay:{flex:1, backgroundColor:'rgba(0,0,0,0.4)', justifyContent:'center', alignItems:'center'}, 
-  modalContent:{width:'88%', backgroundColor:'#fff', borderRadius:16, padding:18, maxHeight:'75%'},
-  modalTitle:{fontSize:18, fontWeight:'bold', marginBottom:12, color:'#333'}, 
-  input:{borderWidth:1, borderColor:'#E0E0E0', borderRadius:10, padding:12, fontSize:15, marginBottom:12, backgroundColor:'#FAFAFA'},
-  modalBtns:{flexDirection:'row', justifyContent:'flex-end', gap:10}, 
-  cancel:{padding:10, backgroundColor:'#F0F0F0', borderRadius:8}, 
-  confirm:{padding:10, backgroundColor:'#2E7D32', borderRadius:8}, 
-  btnTxt:{fontSize:14, fontWeight:'600', color:'#333'},
+  itemDetailName:{fontSize:13, fontWeight:'500', color:'#3E2723', flex:1},
+  itemDetailQty:{fontSize:13, color:'#8D6E63', marginHorizontal:12},
+  itemDetailPrice:{fontSize:13, fontWeight:'600', color:'#E67E22'},
   center:{flex:1, justifyContent:'center', alignItems:'center'},
-  authContainer:{flex:1, backgroundColor:'#F8F9FA', justifyContent:'center'},
-  authBox:{margin:20, backgroundColor:'#fff', borderRadius:16, padding:24, elevation:3},
-  authTitle:{fontSize:26, fontWeight:'bold', textAlign:'center', color:'#2E7D32'},
-  authSub:{fontSize:13, textAlign:'center', color:'#666', marginBottom:16},
-  authToggle:{fontSize:16, fontWeight:'600', marginBottom:14, color:'#333'},
-  authInput:{borderWidth:1, borderColor:'#E0E0E0', borderRadius:10, padding:12, marginBottom:12, fontSize:15, backgroundColor:'#FAFAFA'},
-  roleBox:{flexDirection:'row', gap:10, marginBottom:12},
-  roleBtn:{flex:1, padding:10, borderRadius:10, backgroundColor:'#F0F0F0', alignItems:'center'},
-  roleActive:{backgroundColor:'#E8F5E9', borderWidth:1, borderColor:'#2E7D32'}, roleTxt:{fontWeight:'600', color:'#333'},
-  authBtn:{backgroundColor:'#2E7D32', padding:14, borderRadius:10, alignItems:'center', marginTop:8},
+  authContainer:{flex:1, backgroundColor:'#5D4037'},
+  authHeader:{alignItems:'center', marginBottom:32, marginTop:20},
+  logoCircle:{width:64, height:64, borderRadius:32, backgroundColor:'#E67E22', justifyContent:'center', alignItems:'center', marginBottom:12},
+  logoIcon:{fontSize:32},
+  authTitle:{fontSize:28, fontWeight:'bold', color:'#fff'},
+  authSubtitle:{fontSize:14, color:'#D7CCC8'},
+  authCard:{backgroundColor:'#FDF6E3', borderRadius:20, padding:24, elevation:4},
+  authWelcome:{fontSize:20, fontWeight:'bold', color:'#3E2723', marginBottom:16},
+  authInput:{borderWidth:1, borderColor:'#E0E0E0', borderRadius:12, padding:14, marginBottom:12, fontSize:15, backgroundColor:'#fff'},
+  roleToggle:{flexDirection:'row', gap:8, marginBottom:12},
+  roleToggleBtn:{flex:1, padding:10, borderRadius:12, backgroundColor:'#F5F5F5', alignItems:'center'},
+  roleToggleActive:{backgroundColor:'#E67E22'},
+  roleToggleText:{fontWeight:'600', color:'#8D6E63'},
+  roleToggleTextActive:{color:'#fff'},
+  authBtn:{backgroundColor:'#E67E22', padding:16, borderRadius:12, alignItems:'center', marginTop:8},
   authBtnText:{color:'#fff', fontSize:16, fontWeight:'bold'},
-  authSwitch:{textAlign:'center', marginTop:16, color:'#4A90E2', fontWeight:'500'}
+  authSwitch:{textAlign:'center', marginTop:16, color:'#E67E22', fontWeight:'500'}
 });
