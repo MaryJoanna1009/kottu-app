@@ -38,7 +38,6 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(false);
   const [selectedShop, setSelectedShop] = useState<Shop | null>(null);
 
-  // Auto-login / Session Persistence
   useEffect(() => { loadSession(); }, []);
 
   const loadSession = async () => {
@@ -89,13 +88,11 @@ export default function App() {
     finally { setAuthLoading(false); }
   };
 
-  // Logout clears session. App will show login screen next time.
   const logout = async () => {
     await AsyncStorage.removeItem('kottu_user');
     await AsyncStorage.removeItem('kottu_selected_shop');
     setUser(null); setSelectedShop(null);
     setFormData({ name: '', phone: '', password: '', role: 'customer', shop_name: '', address: '' });
-    setIsLogin(true);
   };
 
   if(loading) return <View style={styles.center}><ActivityIndicator size="large" color="#2E7D32" /><Text style={{marginTop:10, color:'#666'}}>Connecting...</Text></View>;
@@ -155,7 +152,6 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(role==='shopkeeper' ? 'inventory' : 'inventory');
   
-  // Modals & Forms
   const [catModal, setCatModal] = useState(false);
   const [newCat, setNewCat] = useState('');
   const [itemModal, setItemModal] = useState(false);
@@ -164,7 +160,6 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
   const [custName, setCustName] = useState(user?.name || '');
   const [qty, setQty] = useState('1');
   
-  // Order Detail Modal
   const [showOrderDetail, setShowOrderDetail] = useState(false);
   const [selectedOrderDetail, setSelectedOrderDetail] = useState<any>(null);
 
@@ -188,7 +183,8 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
         const ordRes = await fetch(`${API_URL}/api/orders?shop_id=${shopId}`).then(r=>r.json());
         setOrders(ordRes as Order[]);
       } else {
-        const custOrdRes = await fetch(`${API_URL}/api/customer/orders?customer_phone=${user?.phone}`).then(r=>r.json());
+        // CHANGE: Pass shop_id to filter orders by shop
+        const custOrdRes = await fetch(`${API_URL}/api/customer/orders?customer_phone=${user?.phone}&shop_id=${shopId}`).then(r=>r.json());
         setCustomerOrders(custOrdRes as Order[]);
       }
     } catch(e: any) { console.log('Fetch error:', e.message); }
@@ -262,7 +258,6 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
     items: products.filter(p => p.category_id === cat.id)
   }));
 
-  // ==================== RENDER HELPERS ====================
   const renderShopItem = ({item}: {item: Shop}) => (
     <TouchableOpacity style={styles.card} onPress={()=>{setSelectedShop(item); setActiveTab('inventory');}}>
       <View style={styles.cardContent}>
@@ -324,11 +319,27 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
+      
+      {/* HEADER WITH BACK BUTTON FOR CUSTOMER */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>🛒 KOTTU</Text>
+        {role==='customer' && selectedShop ? (
+          <TouchableOpacity 
+            onPress={()=>{setSelectedShop(null); setActiveTab('inventory');}} 
+            style={{flexDirection:'row', alignItems:'center'}}
+          >
+            <Text style={{color:'#fff', fontSize:20, marginRight:8, fontWeight:'bold'}}>←</Text>
+            <Text style={styles.headerTitle}>🛒 KOTTU</Text>
+          </TouchableOpacity>
+        ) : (
+          <Text style={styles.headerTitle}>🛒 KOTTU</Text>
+        )}
         <View style={styles.headerRight}>
-          <TouchableOpacity onPress={()=>setActiveTab('profile')}><Text style={styles.headerUser}>👤 {user?.name}</Text></TouchableOpacity>
-          <TouchableOpacity onPress={onLogout}><Text style={styles.headerLogout}>🚪 Logout</Text></TouchableOpacity>
+          <TouchableOpacity onPress={()=>setActiveTab('profile')}>
+            <Text style={styles.headerUser}>👤 {user?.name}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={onLogout}>
+            <Text style={styles.headerLogout}>🚪 Logout</Text>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -345,7 +356,6 @@ function MainApp({ user, selectedShop, setSelectedShop, onLogout }: {
       </View>
 
       <ScrollView style={{flex:1, backgroundColor:'#F8F9FA'}} contentContainerStyle={{padding:12, paddingBottom:80}}>
-        {/* READ-ONLY PROFILE */}
         {activeTab==='profile' && (
           <View style={styles.profileCard}>
             <Text style={styles.profileTitle}>👤 Profile</Text>

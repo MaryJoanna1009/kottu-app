@@ -253,10 +253,14 @@ def get_orders(shop_id: int):
         return result
 
 @app.get("/api/customer/orders")
-def get_customer_orders(customer_phone: str):
+@app.get("/api/customer/orders")
+def get_customer_orders(customer_phone: str, shop_id: int = None):  # Added shop_id parameter
     if USE_POSTGRES:
         cur, conn = get_db()
-        orders = cur.execute("SELECT id, shop_id, status, created_at FROM orders WHERE customer_phone = %s ORDER BY created_at DESC", (customer_phone,)).fetchall()
+        if shop_id:
+            orders = cur.execute("SELECT id, shop_id, status, created_at FROM orders WHERE customer_phone = %s AND shop_id = %s ORDER BY created_at DESC", (customer_phone, shop_id)).fetchall()
+        else:
+            orders = cur.execute("SELECT id, shop_id, status, created_at FROM orders WHERE customer_phone = %s ORDER BY created_at DESC", (customer_phone,)).fetchall()
         result = []
         for order in orders:
             order_dict = dict(order)
@@ -271,7 +275,10 @@ def get_customer_orders(customer_phone: str):
         return result
     else:
         conn, _ = get_db()
-        orders = conn.execute("SELECT id, shop_id, status, created_at FROM orders WHERE customer_phone = ? ORDER BY created_at DESC", (customer_phone,)).fetchall()
+        if shop_id:
+            orders = conn.execute("SELECT id, shop_id, status, created_at FROM orders WHERE customer_phone = ? AND shop_id = ? ORDER BY created_at DESC", (customer_phone, shop_id)).fetchall()
+        else:
+            orders = conn.execute("SELECT id, shop_id, status, created_at FROM orders WHERE customer_phone = ? ORDER BY created_at DESC", (customer_phone,)).fetchall()
         result = []
         for order in orders:
             order_dict = dict(order)
