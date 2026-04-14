@@ -184,7 +184,7 @@ async def place_order(shop_id: int, item_id: int, customer_name: str, customer_p
     try:
         if USE_POSTGRES:
             cur, conn = get_db()
-            cur.execute("SELECT name, stock FROM inventory WHERE id = %s AND shop_id = %s", (item_id, shop_id))
+            cur.execute("SELECT name, price, stock FROM inventory WHERE id = %s AND shop_id = %s", (item_id, shop_id))
             item = cur.fetchone()
             if not item or item['stock'] < quantity: cur.close(); conn.close(); return {"error": "Insufficient stock"}
             new = item['stock'] - quantity
@@ -198,7 +198,7 @@ async def place_order(shop_id: int, item_id: int, customer_name: str, customer_p
             return {"status": "order_placed", "order_id": order_id}
         else:
             conn, _ = get_db()
-            row = conn.execute("SELECT name, stock FROM inventory WHERE id = ? AND shop_id = ?", (item_id, shop_id)).fetchone()
+            row = conn.execute("SELECT name, price, stock FROM inventory WHERE id = ? AND shop_id = ?", (item_id, shop_id)).fetchone()
             if not row or row["stock"] < quantity: conn.close(); return {"error": "Insufficient stock"}
             new = row["stock"] - quantity
             conn.execute("UPDATE inventory SET stock = ? WHERE id = ?", (new, item_id))
